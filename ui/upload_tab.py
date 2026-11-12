@@ -1,7 +1,11 @@
 """
-upload_tab.py — Upload Tab UI (macOS Glass Polish)
-===================================================
-Modern card layout, rounded action buttons, enhanced preview table styling.
+upload_tab.py — Dataset Ingestion Tab with Automated Data Hygiene Audit
+========================================================================
+Highlights:
+  - Clean CSV ingestion pipeline
+  - Instant Data Hygiene & Quality Audit Banner
+  - Missing value %, Duplicates, and IQR Outlier detection
+  - Scrollable high-contrast Treeview preview
 """
 
 import customtkinter as ctk
@@ -10,10 +14,11 @@ import tkinter.ttk as ttk
 import pandas as pd
 import os
 import db
+import data_quality
 
 
 class UploadTab:
-    """Manages the Upload tab of the application."""
+    """Manages the Upload & Data Quality tab of the application."""
     
     def __init__(self, parent):
         self.parent = parent
@@ -21,22 +26,22 @@ class UploadTab:
         self.current_filename = None
         
         # --- Top Action Card ---
-        self.top_frame = ctk.CTkFrame(parent, fg_color="#18191E", corner_radius=12)
-        self.top_frame.pack(fill="x", padx=16, pady=(12, 6))
+        self.top_frame = ctk.CTkFrame(parent, fg_color="#121316", corner_radius=12)
+        self.top_frame.pack(fill="x", padx=16, pady=(10, 6))
         
         btn_row = ctk.CTkFrame(self.top_frame, fg_color="transparent")
-        btn_row.pack(fill="x", padx=12, pady=10)
+        btn_row.pack(fill="x", padx=14, pady=10)
         
         # Select CSV Button
         self.btn_select = ctk.CTkButton(
             btn_row,
             text="📂  Choose CSV File",
             command=self.select_file,
-            width=170,
+            width=175,
             height=38,
-            font=ctk.CTkFont(size=13, weight="bold"),
-            fg_color="#3B82F6",
-            hover_color="#2563EB",
+            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
+            fg_color="#5E6AD2",
+            hover_color="#4F58B8",
             corner_radius=8
         )
         self.btn_select.pack(side="left", padx=(0, 10))
@@ -46,9 +51,9 @@ class UploadTab:
             btn_row,
             text="💾  Save to MySQL",
             command=self.save_to_mysql,
-            width=170,
+            width=175,
             height=38,
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
             state="disabled",
             fg_color="#10B981",
             hover_color="#059669",
@@ -59,28 +64,37 @@ class UploadTab:
         # Status Label
         self.lbl_status = ctk.CTkLabel(
             btn_row,
-            text="Select any dataset to begin previewing",
-            font=ctk.CTkFont(size=12),
+            text="Select any dataset to begin inspection & database ingestion",
+            font=ctk.CTkFont(family="Segoe UI", size=12),
             text_color="#94A3B8"
         )
         self.lbl_status.pack(side="left", padx=5)
         
-        # --- Metadata Stats Pill Bar ---
-        self.info_frame = ctk.CTkFrame(parent, fg_color="#22252D", corner_radius=8)
-        self.info_frame.pack(fill="x", padx=16, pady=4)
+        # --- Metadata & Quality Audit Banner ---
+        self.audit_frame = ctk.CTkFrame(parent, fg_color="#121316", corner_radius=12)
+        self.audit_frame.pack(fill="x", padx=16, pady=4)
         
-        self.lbl_info = ctk.CTkLabel(
-            self.info_frame,
-            text="⚡ No dataset loaded into memory yet.",
-            font=ctk.CTkFont(size=12, family="Consolas"),
-            text_color="#CBD5E1",
-            justify="left"
+        audit_inner = ctk.CTkFrame(self.audit_frame, fg_color="transparent")
+        audit_inner.pack(fill="x", padx=14, pady=8)
+        
+        ctk.CTkLabel(
+            audit_inner,
+            text="🛡️ Dataset Hygiene & Quality Audit:",
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+            text_color="#818CF8"
+        ).pack(side="left", padx=(0, 10))
+        
+        self.lbl_audit_stats = ctk.CTkLabel(
+            audit_inner,
+            text="Completeness: --  |  Missing Values: --  |  Duplicates: --  |  Outliers: --",
+            font=ctk.CTkFont(family="Consolas", size=11),
+            text_color="#E2E8F0"
         )
-        self.lbl_info.pack(padx=14, pady=6, anchor="w")
+        self.lbl_audit_stats.pack(side="left")
         
         # --- Table Preview Frame ---
-        self.table_frame = ctk.CTkFrame(parent, fg_color="#18191E", corner_radius=12)
-        self.table_frame.pack(fill="both", expand=True, padx=16, pady=(6, 14))
+        self.table_frame = ctk.CTkFrame(parent, fg_color="#121316", corner_radius=12)
+        self.table_frame.pack(fill="both", expand=True, padx=16, pady=(6, 12))
         
         self.tree = None
         self.tree_scroll_y = None
@@ -89,8 +103,8 @@ class UploadTab:
         # Placeholder
         self.placeholder = ctk.CTkLabel(
             self.table_frame,
-            text="📊 Dataset Preview Canvas\n\nClick 'Choose CSV File' to inspect rows, schema & types.",
-            font=ctk.CTkFont(size=15),
+            text="📊 Dataset Preview Canvas\n\nClick 'Choose CSV File' to inspect rows, schema & data quality.",
+            font=ctk.CTkFont(family="Segoe UI", size=15),
             text_color="#64748B"
         )
         self.placeholder.pack(expand=True)
@@ -120,14 +134,18 @@ class UploadTab:
                 text_color="#34D399"
             )
             
-            rows, cols = df.shape
-            mem = df.memory_usage(deep=True).sum()
-            mem_str = f"{mem / (1024*1024):.1f} MB" if mem > 1024 * 1024 else f"{mem / 1024:.1f} KB"
-            target_table = db.sanitize_table_name(self.current_filename)
-            
-            info_text = f"📋 Rows: {rows:,}  |  Columns: {cols}  |  RAM: {mem_str}  |  Target Table: `{target_table}`"
-            self.lbl_info.configure(text=info_text, text_color="#F8FAFC")
-            
+            # Run Automated Data Quality Audit
+            audit = data_quality.profile_dataset(df)
+            if audit:
+                total_outliers = sum(c["outliers"] for c in audit["columns"])
+                audit_str = (
+                    f"Completeness: {audit['completeness']}%  |  "
+                    f"Missing: {audit['total_missing']} cells  |  "
+                    f"Duplicates: {audit['duplicates']} rows  |  "
+                    f"IQR Outliers: {total_outliers}"
+                )
+                self.lbl_audit_stats.configure(text=audit_str)
+                
             self.btn_save.configure(state="normal")
             self._display_dataframe(df)
             
@@ -150,24 +168,23 @@ class UploadTab:
         columns = list(df.columns)
         self.tree = ttk.Treeview(inner, columns=columns, show="headings", height=18)
         
-        # Modern Treeview Theme
         style = ttk.Style()
         style.theme_use("default")
         style.configure(
             "Treeview",
-            background="#1E2026",
+            background="#16181D",
             foreground="#E2E8F0",
-            fieldbackground="#1E2026",
+            fieldbackground="#16181D",
             rowheight=26,
             font=('Segoe UI', 9)
         )
         style.configure(
             "Treeview.Heading",
-            background="#282D37",
+            background="#22252C",
             foreground="#F8FAFC",
             font=('Segoe UI', 10, 'bold')
         )
-        style.map("Treeview", background=[("selected", "#3B82F6")])
+        style.map("Treeview", background=[("selected", "#5E6AD2")])
         
         for col in columns:
             self.tree.heading(col, text=col, anchor="w")
@@ -197,7 +214,7 @@ class UploadTab:
             "Confirm Ingestion",
             f"Save dataset into MySQL table `{table_name}`?\n\n"
             f"Rows: {len(self.current_df):,}\nColumns: {len(self.current_df.columns)}\n\n"
-            "Existing table with same name will be overwritten."
+            "Existing table with same name will be replaced."
         )
         if not confirm:
             return
