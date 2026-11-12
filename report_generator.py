@@ -79,10 +79,13 @@ def generate_executive_pdf(filepath, question, sql, text_summary, df, fig=None):
     pdf.set_draw_color(226, 232, 240)
     pdf.set_line_width(0.3)
     
-    # Calculate text height for the box
+    # Calculate text height for the box accurately
     pdf.set_font('Helvetica', '', 9.5)
-    # Estimate height based on length
-    box_height = max(26, 12 + (len(safe_summary) // 85) * 5)
+    lines = safe_summary.split('\n')
+    line_count = 0
+    for l in lines:
+        line_count += max(1, (len(l) // 72) + 1)
+    box_height = max(28, 14 + int(line_count * 5.2))
     pdf.rect(14, start_y, 182, box_height, 'DF')
     
     pdf.set_xy(18, start_y + 3)

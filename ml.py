@@ -39,9 +39,13 @@ def _apply_dark_style(fig, ax):
 
 
 def run_linear_regression(df, feature_col, target_col):
-    clean_df = df[[feature_col, target_col]].dropna()
+    clean_df = df[[feature_col, target_col]].copy()
+    clean_df[feature_col] = pd.to_numeric(clean_df[feature_col], errors='coerce')
+    clean_df[target_col] = pd.to_numeric(clean_df[target_col], errors='coerce')
+    clean_df = clean_df.dropna()
+    
     if len(clean_df) < 5:
-        raise ValueError(f"Need at least 5 valid data points, but only got {len(clean_df)}.")
+        raise ValueError(f"Need at least 5 valid numeric rows, but only found {len(clean_df)}.")
         
     X = clean_df[feature_col].values.reshape(-1, 1)
     y = clean_df[target_col].values
@@ -100,9 +104,13 @@ def run_linear_regression(df, feature_col, target_col):
 
 
 def run_kmeans(df, col_x, col_y, n_clusters=3):
-    clean_df = df[[col_x, col_y]].dropna()
+    clean_df = df[[col_x, col_y]].copy()
+    clean_df[col_x] = pd.to_numeric(clean_df[col_x], errors='coerce')
+    clean_df[col_y] = pd.to_numeric(clean_df[col_y], errors='coerce')
+    clean_df = clean_df.dropna()
+    
     if len(clean_df) < n_clusters:
-        raise ValueError(f"Need at least {n_clusters} data points for {n_clusters} clusters.")
+        raise ValueError(f"Need at least {n_clusters} valid numeric rows for {n_clusters} clusters, but found {len(clean_df)}.")
         
     X = clean_df[[col_x, col_y]].values
     scaler = StandardScaler()

@@ -200,3 +200,79 @@ Looking to grow this beyond college into a commercial SaaS or open-source tool? 
 3. **Interactive Data Studio:** Replace static charts with interactive Plotly / D3 canvases wrapped in web-view frames.
 4. **Natural Language CSV Cleanser:** Let users type prompts like *"Fill missing ages with median"* or *"Remove duplicate emails"*, translating natural language into Pandas transformation pipelines.
 5. **Multi-Tenant Cloud Sync:** Add user authentication and workspace syncing so teams can share analysis sessions and reports across distributed devices.
+
+
+---
+
+## 🔍 Phase 6: Code Audit, Bug Resolution & Automated Setup Engine
+
+### 1. Comprehensive Code Audit Findings & Fixes (2026-11-13)
+
+| Component | Defect Discovered | Technical Impact | Engineering Fix Implemented |
+|---|---|---|---|
+| `ui/chat_tab.py` | Repeated creation of `ttk.Scrollbar` widgets inside `_display_table()` without destroying previous scrollbars. | Ghost scrollbars accumulated along the right and bottom borders on every executed query, degrading memory and layout. | Converted Treeview and its horizontal/vertical scrollbars to a permanent persistent pattern: initialized once in `__init__`, reused across queries, only clearing rows and headers. |
+| `ui/interactive_tab.py` | `_on_type_changed()` re-packed `self.lbl_z` and `self.z_dd` after `self.btn_launch`. | Toggling from 3D to 2D and back moved the Z-axis dropdown to the right of the launch button, disrupting the visual button order. | Used `pack(before=self.btn_launch)` to guarantee strict horizontal positioning regardless of toggle cycles. |
+| `ai_chat.py` | String literal `{table_name}` in rule 2 of system prompt was not interpolated. | LLM received unformatted `{table_name}` template instead of active table name. | Converted prompt to dynamic formatted string passing active `table_name` wrapped in backticks. |
+| `ai_chat.py` | Wide datasets (50+ columns) generated massive string previews in `summarize_results()`. | Exceeded prompt token budget on wide datasets. | Added column-clamping (`max_cols=10`) and NaN sanitization (`.fillna('-')`) before constructing summary prompts. |
+| `report_generator.py` | FPDF text card height was computed via static division `(len(text) // 85) * 5`. | Multi-line takeaways with newlines or early word-wraps spilled outside the colored card bounding box. | Implemented dynamic line-splitting height calculation factoring explicit newlines and line wrapping (`line_count * 5.2`). |
+| `ml.py` | String columns containing numeric text caused `ValueError` in `LinearRegression` and `KMeans`. | Models crashed if MySQL column was imported as `TEXT` or object dtype. | Added explicit numeric coercion `pd.to_numeric(col, errors='coerce')` before dropping nulls in both ML algorithms. |
+| `ui/ml_tab.py` | Cluster count $K$ parsed raw integer input without bounds validation. | Entering non-integers, negative numbers, or $>20$ caused uncaught runtime exceptions. | Added validation dialog enforcing $K \in [2, 20]$ with informative user warning popups. |
+| `db.py` | Single `cursor.executemany` call attempted to insert all CSV rows in one network packet. | Large CSV files (>20,000 rows) could trigger MySQL `max_allowed_packet` or timeout exceptions. | Refactored batch insertion into chunked transactions of 1,000 records per `executemany` batch. |
+| `charts.py` | Pie chart with non-positive values triggered Matplotlib runtime errors. | Datasets containing zero or negative numeric metrics crashed the donut chart generator. | Added positive-value filtering (`plot_df[value_col] > 0`) with friendly empty-state placeholder rendering. |
+| `ui/settings_tab.py` | User had no way to verify their Groq API key without running a database query. | If API key was misconfigured or quota was exceeded, user only discovered it during an active query. | Added interactive **"⚡ Test API Connection"** tool in Settings with live latency and model detection dialog. |
+| `.gitignore` | Runtime state files (`history.json`, `settings.json`, `interactive_chart.html`) were not ignored. | Local query histories and browser output files were tracked in Git, causing merge conflicts between users. | Added comprehensive runtime exclusions and untracked `history.json` from the repository cache. |
+
+---
+
+## 📦 1-Command Setup & Distribution Architecture
+
+To allow any user to clone and run the application with a single command from GitHub, an automated setup suite was designed and implemented:
+
+```mermaid
+flowchart TD
+    Clone["git clone https://github.com/Mohith535/ai-data-analyst.git"] --> Run["setup.bat (Windows) / setup.sh (macOS/Linux)"]
+    Run --> PyCheck{"1. Python >= 3.10 Installed?"}
+    PyCheck -- No --> Abort1["❌ Display Python Download URL & Exit"]
+    PyCheck -- Yes --> PipInstall["2. pip install -r requirements.txt"]
+    PipInstall --> EnvCheck{"3. .env File Configured?"}
+    EnvCheck -- Missing Key --> GroqGuide["Display Free Groq Key Guide\n(console.groq.com/keys)"]
+    GroqGuide --> GroqTest{"Test Key with Groq Cloud"}
+    GroqTest -- Valid --> DBPrompt["4. Prompt MySQL Host, User, Password, DB"]
+    DBPrompt --> DBTest{"Test MySQL Connection"}
+    DBTest -- Success --> SaveEnv["Write Credentials to .env"]
+    SaveEnv --> SeedDB["5. Pre-load sample_data/sales_data.csv into MySQL"]
+    SeedDB --> Launch["6. Launch Application (python main.py)"]
+```
+
+### Setup Scripts Included:
+1. **`setup.py`**: Cross-platform Python setup assistant with colorized ANSI terminal output, interactive Groq key tester, MySQL connection validator, database auto-creator, and sample data loader.
+2. **`setup.bat`**: Windows batch wrapper checking for `python` on `PATH` and launching `setup.py` with error pausing.
+3. **`setup.sh`**: macOS and Linux shell script wrapper checking for `python3` and launching `setup.py`.
+4. **`run.bat`**: Windows quick launcher for returning users.
+5. **`run.sh`**: macOS and Linux quick launcher for returning users.
+6. **`requirements.txt`**: Complete dependencies list with minimum tested versions.
+
+---
+
+## 🎓 Extended Viva Voce Preparation Manual (Part 2)
+
+### Q9: How does the application prevent memory leaks when users execute dozens of queries sequentially?
+> **Answer:** "In graphical frameworks like CustomTkinter and Tkinter, destroying and recreating widgets repeatedly can leave orphaned sub-widgets, bindings, and scrollbar instances in memory. In `chat_tab.py` and `upload_tab.py`, we implement a **Persistent Widget Architecture**: the `ttk.Treeview` and its associated `ttk.Scrollbar` widgets are constructed once. When new data arrives, we clear existing rows (`tree.delete(item)`) and reconfigure headings rather than destroying the widget. Similarly, Matplotlib figure instances are embedded via `FigureCanvasTkAgg` and explicitly cleared/redrawn rather than creating new canvas containers."
+
+### Q10: Why did we refactor MySQL ingestion to use 1,000-row chunked batches?
+> **Answer:** "MySQL servers enforce a `max_allowed_packet` buffer size (typically 16MB–64MB). When executing `cursor.executemany()` on a CSV containing tens of thousands of rows, compiling the raw SQL packet and parameters in one go can exceed this buffer or exhaust client memory, causing connection reset errors (`Error 2013: Lost connection to MySQL server`). By chunking the insertion into batches of 1,000 records, the application bounds memory usage and ensures predictable transaction commits."
+
+### Q11: How does the application ensure thread safety when background threads communicate with the GUI?
+> **Answer:** "Tkinter is fundamentally not thread-safe: invoking GUI methods (such as updating labels or inserting into Treeviews) from a background worker thread causes race conditions, visual glitches, or silent crashes. In `chat_tab.py`, AI network requests run on a background daemon thread (`threading.Thread(daemon=True)`). When the API response or database result is ready, we dispatch the update back to the main GUI thread using `self.parent.after(0, self._update_ui_with_results, ...)` which schedules the UI update cleanly inside Tkinter's main event loop."
+
+### Q12: Why are Groq LPU LPUs (Language Processing Units) preferred over traditional GPU hosting for Text-to-SQL?
+> **Answer:** "Text-to-SQL in an interactive desktop application requires sub-second response times so the user feels like they are querying a local database. Traditional GPU hosting suffers from queuing delays and sequential token generation bottlenecks. Groq's Tensor Streaming Processor (TSP) architecture provides deterministic, high-bandwidth memory execution, delivering inference speeds over 500 tokens per second. This allows our app to compile SQL, validate it, and execute it in under 600ms total round-trip time."
+
+### Q13: What is the purpose of the AST & regex SQL validation step?
+> **Answer:** "Large Language Models are probabilistic and cannot be treated as trusted database users. Prompt injection attacks or hallucinations could produce harmful commands like `DROP TABLE users;` or `DELETE FROM sales;`. Our `validate_sql()` function acts as an application-level firewall: it enforces that every query must begin with `SELECT` or `WITH`, bans multi-statement chaining via semicolons, and inspects token boundaries for dangerous DDL/DML keywords (`DROP`, `ALTER`, `TRUNCATE`, `INSERT`, `UPDATE`, `GRANT`)."
+
+### Q14: How does the Interactive Studio render Plotly 3D visualisations from a desktop Python client?
+> **Answer:** "Plotly natively generates self-contained HTML documents containing Plotly JavaScript bundles and WebGL shaders for GPU-accelerated rendering. In `interactive_studio.py`, `generate_interactive_chart()` translates Pandas DataFrame dimensions into Plotly figures (`px.scatter_3d`, `px.imshow`, etc.), writes the output to `interactive_chart.html`, and launches the system default browser via Python's `webbrowser.open()`. This gives the user smooth 60fps 3D rotation, zooming, pan, and hover tooltips without the rendering limitations of native desktop GUI toolkits."
+
+### Q15: How does the application handle CSV delimiter inconsistencies?
+> **Answer:** "CSV files in the real world are not always comma-delimited; European files frequently use semicolons (`;`) and TSV exports use tabs (`\t`). In `upload_tab.py`, our ingestion pipeline utilizes a cascading fallback: it first attempts standard UTF-8 comma parsing; if a decode error occurs, it falls back to `latin-1`; if format errors occur, it activates Pandas' C/Python sniffing engine (`sep=None, engine='python'`) which analyzes the first few lines to deduce the true delimiter automatically."

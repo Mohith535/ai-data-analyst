@@ -145,13 +145,24 @@ def create_pie_chart(df, label_col, value_col, title=None):
     _apply_dark_style(fig, ax)
     
     plot_df = df.copy()
+    plot_df[value_col] = pd.to_numeric(plot_df[value_col], errors='coerce')
+    plot_df = plot_df.dropna(subset=[value_col])
+    plot_df = plot_df[plot_df[value_col] > 0]
+    
+    if plot_df.empty:
+        ax.text(0.5, 0.5, "No positive values to display in pie chart",
+                horizontalalignment='center', verticalalignment='center',
+                color='#94A3B8', fontsize=12, transform=ax.transAxes)
+        ax.set_title(title or "Distribution", fontsize=13, fontweight='bold', pad=12)
+        fig.tight_layout()
+        return fig
+    
     if len(plot_df) > 7:
-        if pd.api.types.is_numeric_dtype(plot_df[value_col]):
-            plot_df = plot_df.sort_values(value_col, ascending=False)
-            top = plot_df.head(6)
-            other_val = plot_df.iloc[6:][value_col].sum()
-            other_row = pd.DataFrame({label_col: ['Other'], value_col: [other_val]})
-            plot_df = pd.concat([top, other_row], ignore_index=True)
+        plot_df = plot_df.sort_values(value_col, ascending=False)
+        top = plot_df.head(6)
+        other_val = plot_df.iloc[6:][value_col].sum()
+        other_row = pd.DataFrame({label_col: ['Other'], value_col: [other_val]})
+        plot_df = pd.concat([top, other_row], ignore_index=True)
     
     wedges, texts, autotexts = ax.pie(
         plot_df[value_col],

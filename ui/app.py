@@ -251,7 +251,7 @@ class App(ctk.CTk):
             self.sidebar_frame.configure(width=240)
             self.lbl_brand.pack(side="left", padx=10)
             self.lbl_history_title.pack(side="left")
-            self.history_scroll.pack(fill="both", expand=True, padx=6, pady=2)
+            self.history_scroll.pack(fill="both", expand=True, padx=6, pady=2, before=self.bottom_sidebar)
             self.lbl_engine_badge.configure(text="⚡ Groq 120B Connected")
             for key, (btn, icon, title) in self.nav_buttons.items():
                 btn.configure(text=f"  {icon}  {title}", anchor="w")

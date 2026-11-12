@@ -1,0 +1,33 @@
+# ==============================================================================
+# AI Data Analyst — Core Requirements Specification
+# ==============================================================================
+# Compatible with Python 3.10, 3.11, 3.12+
+
+# Modern macOS/Linear Dark UI
+customtkinter>=6.0.0
+
+# MySQL Enterprise Driver
+mysql-connector-python>=8.0.0
+
+# Vectorized Data Processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Visual Analytics (Matplotlib Dark Canvas)
+matplotlib>=3.7.0
+
+# Machine Learning Pipelines (Linear Regression & KMeans)
+scikit-learn>=1.3.0
+
+# Groq Cloud Low-Latency LPU Inference (Text-to-SQL & Educational Insights)
+groq>=0.4.0
+
+# 12-Factor App Environment Management
+python-dotenv>=1.0.0
+
+# Executive PDF Dossier Generation
+fpdf2>=2.7.0
+reportlab>=4.0.0
+
+# Interactive 3D & Zoomable Web Visualizations
+plotly>=5.0.0

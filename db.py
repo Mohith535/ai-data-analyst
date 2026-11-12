@@ -144,7 +144,7 @@ def load_dataframe_to_mysql(df, table_name):
         cursor.execute(f"DROP TABLE IF EXISTS `{table_name}`")
         cursor.execute(create_sql)
         
-        # 4. Insert rows in batches
+        # 4. Insert rows in batches of 1,000 to prevent packet size overflows
         placeholders = ', '.join(['%s'] * len(clean_df.columns))
         col_names = ', '.join([f"`{c}`" for c in clean_df.columns])
         insert_sql = f"INSERT INTO `{table_name}` ({col_names}) VALUES ({placeholders})"
@@ -162,7 +162,9 @@ def load_dataframe_to_mysql(df, table_name):
                     clean_row.append(val)
             clean_data.append(tuple(clean_row))
         
-        cursor.executemany(insert_sql, clean_data)
+        batch_size = 1000
+        for i in range(0, len(clean_data), batch_size):
+            cursor.executemany(insert_sql, clean_data[i:i + batch_size])
         conn.commit()
         
         return True, f"Ingested {len(clean_data)} rows into table `{table_name}`"

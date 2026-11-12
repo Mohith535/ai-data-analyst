@@ -122,11 +122,16 @@ class UploadTab:
             return
             
         try:
-            # Handle potential encoding issues (UTF-8, Latin-1 fallback)
+            # Handle potential encoding issues & varied delimiters (UTF-8, Latin-1 fallback)
             try:
                 df = pd.read_csv(filepath)
             except UnicodeDecodeError:
                 df = pd.read_csv(filepath, encoding='latin-1')
+            except Exception:
+                try:
+                    df = pd.read_csv(filepath, sep=None, engine='python')
+                except Exception:
+                    df = pd.read_csv(filepath, encoding='latin-1', sep=None, engine='python')
                 
             if df.empty:
                 messagebox.showwarning("Empty File", "This CSV file contains 0 rows.")

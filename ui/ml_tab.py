@@ -151,7 +151,7 @@ class MLTab:
             messagebox.showwarning("Notice", "Select table and numerical features.")
             return
             
-        sql = f"SELECT `{f}`, `{t}` FROM `{table}`"
+        sql = f"SELECT `{f}`, `{t}` FROM `{table}` LIMIT 10000"
         df, err = db.run_query(sql)
         if err or df is None or df.empty:
             messagebox.showerror("Data Error", err or "No rows found.")
@@ -167,7 +167,13 @@ class MLTab:
                 self.lbl_results.configure(text=txt)
                 self._embed_chart(res['figure'])
             else:
-                k = int(self.clusters_var.get())
+                try:
+                    k = int(self.clusters_var.get().strip())
+                    if k < 2 or k > 20:
+                        raise ValueError("Cluster count K must be an integer between 2 and 20.")
+                except ValueError as ve:
+                    messagebox.showwarning("Invalid Cluster Parameter", f"Please enter a valid number of clusters (2-20):\n{ve}")
+                    return
                 res = ml.run_kmeans(df, f, t, n_clusters=k)
                 txt = f"📊 K: {res['n_clusters']}  |  Inertia: {res['inertia']:.2f}  |  Counts: {res['cluster_sizes']}"
                 self.lbl_results.configure(text=txt)

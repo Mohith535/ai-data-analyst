@@ -54,13 +54,23 @@ def build_schema_prompt(table_name, schema):
 
 
 def validate_sql(query):
+    if not query:
+        return False, "Empty query received."
+        
     clean = query.strip()
-    clean = re.sub(r"^```(?:sql)?\s*", "", clean, flags=re.IGNORECASE)
-    clean = re.sub(r"\s*```$", "", clean)
-    clean = clean.strip()
     
-    if clean.endswith(";"):
-        clean = clean[:-1].strip()
+    # Extract from markdown block if LLM returned fenced code
+    md_match = re.search(r"```(?:sql)?\s*([\s\S]*?)\s*```", clean, re.IGNORECASE)
+    if md_match:
+        clean = md_match.group(1).strip()
+        
+    # Strip any accidental preamble (e.g., "Here is your query: SELECT ...")
+    select_match = re.search(r"\b(SELECT|WITH)\b[\s\S]*", clean, re.IGNORECASE)
+    if select_match:
+        clean = select_match.group(0).strip()
+        
+    # Remove trailing semicolon
+    clean = clean.rstrip(";").strip()
         
     if ";" in clean:
         return False, "Query contains multiple statements. Only single queries are allowed."
@@ -93,7 +103,7 @@ def generate_sql(table_name, schema, user_question, model=None):
         "Your sole task is to convert any user request, question, or overview prompt into a valid MySQL 8.0 SELECT statement.\n"
         "CRITICAL RULES:\n"
         "1. Return ONLY the raw SQL query. Absolutely NO conversational disclaimers, NO markdown code fences, and NO apologies.\n"
-        "2. If the user asks for an overview, summary, or generic exploration, write: `SELECT * FROM `{table_name}` LIMIT 25`\n"
+        f"2. If the user asks for an overview, summary, or generic exploration, write: SELECT * FROM `{table_name}` LIMIT 25\n"
         "3. ONLY output SELECT statements. Never write DROP, DELETE, UPDATE, INSERT, or ALTER.\n"
         "4. Wrap all table and column names in backticks (`).\n"
         "5. Do NOT include a semicolon at the end."
@@ -143,7 +153,11 @@ def summarize_results(user_question, df, model=None):
     if not model:
         model = get_available_model(client)
         
-    sample_data = df.head(8).to_string(index=False)
+    # Take a clean preview without overwhelming tokens if wide dataset
+    clean_sample = df.head(8).fillna('-')
+    if len(clean_sample.columns) > 10:
+        clean_sample = clean_sample.iloc[:, :10]
+    sample_data = clean_sample.to_string(index=False)
     total_rows = len(df)
     
     system_prompt = (

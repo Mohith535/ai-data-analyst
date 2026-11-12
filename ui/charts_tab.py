@@ -113,7 +113,7 @@ class ChartsTab:
             messagebox.showwarning("Notice", "Select table and axis columns.")
             return
             
-        sql = f"SELECT `{y_col}` FROM `{table}`" if chart_type == "Histogram" else f"SELECT `{x_col}`, `{y_col}` FROM `{table}`"
+        sql = f"SELECT `{y_col}` FROM `{table}` LIMIT 5000" if chart_type == "Histogram" else f"SELECT `{x_col}`, `{y_col}` FROM `{table}` LIMIT 5000"
         df, error = db.run_query(sql)
         if error or df is None or df.empty:
             messagebox.showerror("Query Error", error or "Query returned 0 rows.")

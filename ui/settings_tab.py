@@ -120,7 +120,7 @@ class SettingsTab:
         )
         self.btn_clear_hist.pack(side="left")
         
-        # Active Model Info
+        # Active Model Info & Test Connection Row
         row_model = ctk.CTkFrame(sec2, fg_color="transparent")
         row_model.pack(fill="x", padx=16, pady=(4, 14))
         
@@ -129,7 +129,40 @@ class SettingsTab:
             text="Active LLM Pipeline:  OpenAI GPT-OSS 120B / Qwen 27B via Groq Cloud LPU",
             font=ctk.CTkFont(family="Consolas", size=11),
             text_color="#64748B"
-        ).pack(side="left")
+        ).pack(side="left", padx=(0, 15))
+
+        self.btn_test_api = ctk.CTkButton(
+            row_model,
+            text="⚡ Test API Connection",
+            command=self._test_groq_connection,
+            width=160,
+            height=30,
+            fg_color="#1E2024",
+            hover_color="#5E6AD2",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold")
+        )
+        self.btn_test_api.pack(side="left")
+
+    def _test_groq_connection(self):
+        self.btn_test_api.configure(state="disabled", text="⏳ Testing...")
+        self.parent.update()
+        try:
+            client = ai_chat.get_groq_client()
+            model = ai_chat.get_available_model(client)
+            messagebox.showinfo(
+                "Groq API Connected",
+                f"Successfully connected to Groq LPU Cloud!\n\n"
+                f"Active Model: {model}\n"
+                f"Status: Operational (Ready for Text-to-SQL & Insights)"
+            )
+        except Exception as e:
+            messagebox.showerror(
+                "Groq Connection Error",
+                f"Could not connect to Groq API:\n\n{e}\n\n"
+                "Please verify your GROQ_API_KEY in .env or run setup.bat."
+            )
+        finally:
+            self.btn_test_api.configure(state="normal", text="⚡ Test API Connection")
         
     def _save_toggles(self):
         settings_manager.set_setting("ai_teacher_mode", self.sw_teacher_var.get())

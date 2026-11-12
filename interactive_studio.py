@@ -60,6 +60,9 @@ def generate_interactive_chart(df, chart_type, x_col, y_col, z_col=None, color_c
         )
     elif chart_type == "Correlation Heatmap":
         numeric_df = df.select_dtypes(include=['number'])
+        numeric_df = numeric_df[[c for c in numeric_df.columns if c != '_id']]
+        if len(numeric_df.columns) < 2:
+            raise ValueError("Correlation Heatmap requires at least 2 numeric columns in the dataset.")
         corr = numeric_df.corr()
         fig = px.imshow(
             corr, text_auto=True, aspect="auto",

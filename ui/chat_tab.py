@@ -36,6 +36,8 @@ class ChatTab:
         self.current_summary = None
         self.on_query_success = None
         self.tree = None
+        self.tree_scroll_y = None
+        self.tree_scroll_x = None
         
         # --- Top Filter & Action Bar ---
         self.top_frame = ctk.CTkFrame(parent, fg_color="#121316", corner_radius=12)
@@ -333,50 +335,72 @@ class ChatTab:
             print(f"[HISTORY ERROR] {e}")
             
     def _display_table(self, df):
-        if self.tree is not None:
-            self.tree.destroy()
         self.table_placeholder.pack_forget()
         
         if df is None or df.empty:
+            if self.tree is not None:
+                self.tree.pack_forget()
+                if self.tree_scroll_y:
+                    self.tree_scroll_y.pack_forget()
+                if self.tree_scroll_x:
+                    self.tree_scroll_x.pack_forget()
             self.table_placeholder.configure(text="Query returned 0 rows.")
             self.table_placeholder.pack(expand=True)
             return
             
+        if self.tree is None:
+            style = ttk.Style()
+            style.theme_use("default")
+            style.configure(
+                "Treeview",
+                background="#16181D",
+                foreground="#E2E8F0",
+                fieldbackground="#16181D",
+                rowheight=28,
+                font=('Segoe UI', 10)
+            )
+            style.configure(
+                "Treeview.Heading",
+                background="#22252C",
+                foreground="#F8FAFC",
+                font=('Segoe UI', 10, 'bold')
+            )
+            style.map("Treeview", background=[("selected", "#5E6AD2")])
+            
+            self.tree_scroll_y = ttk.Scrollbar(self.tree_container, orient="vertical")
+            self.tree_scroll_x = ttk.Scrollbar(self.tree_container, orient="horizontal")
+            
+            self.tree = ttk.Treeview(
+                self.tree_container,
+                show="headings",
+                height=12,
+                yscrollcommand=self.tree_scroll_y.set,
+                xscrollcommand=self.tree_scroll_x.set
+            )
+            self.tree_scroll_y.configure(command=self.tree.yview)
+            self.tree_scroll_x.configure(command=self.tree.xview)
+            
+            self.tree_scroll_y.pack(side="right", fill="y")
+            self.tree_scroll_x.pack(side="bottom", fill="x")
+            self.tree.pack(fill="both", expand=True)
+        else:
+            self.tree_scroll_y.pack(side="right", fill="y")
+            self.tree_scroll_x.pack(side="bottom", fill="x")
+            self.tree.pack(fill="both", expand=True)
+            
+        # Clear previous rows
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+            
         columns = list(df.columns)
-        self.tree = ttk.Treeview(self.tree_container, columns=columns, show="headings", height=12)
-        
-        style = ttk.Style()
-        style.theme_use("default")
-        style.configure(
-            "Treeview",
-            background="#16181D",
-            foreground="#E2E8F0",
-            fieldbackground="#16181D",
-            rowheight=28,
-            font=('Segoe UI', 10)
-        )
-        style.configure(
-            "Treeview.Heading",
-            background="#22252C",
-            foreground="#F8FAFC",
-            font=('Segoe UI', 10, 'bold')
-        )
-        style.map("Treeview", background=[("selected", "#5E6AD2")])
-        
-        scroll_y = ttk.Scrollbar(self.tree_container, orient="vertical", command=self.tree.yview)
-        scroll_x = ttk.Scrollbar(self.tree_container, orient="horizontal", command=self.tree.xview)
-        self.tree.configure(yscrollcommand=scroll_y.set, xscrollcommand=scroll_x.set)
+        self.tree["columns"] = columns
         
         for col in columns:
-            self.tree.heading(col, text=col, anchor="w")
-            self.tree.column(col, width=max(90, min(200, len(str(col)) * 12 + 25)), anchor="w")
+            self.tree.heading(col, text=str(col), anchor="w")
+            self.tree.column(col, width=max(90, min(220, len(str(col)) * 12 + 25)), anchor="w")
             
-        scroll_y.pack(side="right", fill="y")
-        scroll_x.pack(side="bottom", fill="x")
-        self.tree.pack(fill="both", expand=True)
-        
         for _, row in df.head(100).iterrows():
-            vals = [str(v) if v is not None else "" for v in row]
+            vals = [str(v) if v is not None and str(v) != "nan" else "" for v in row]
             self.tree.insert("", "end", values=vals)
             
     def _display_chart(self, df):

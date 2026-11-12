@@ -140,8 +140,8 @@ class InteractiveTab:
             
     def _on_type_changed(self, chart_type):
         if chart_type == "Scatter 3D":
-            self.lbl_z.pack(side="left", padx=(0, 4))
-            self.z_dd.pack(side="left", padx=(0, 14))
+            self.lbl_z.pack(side="left", padx=(0, 4), before=self.btn_launch)
+            self.z_dd.pack(side="left", padx=(0, 14), before=self.btn_launch)
         else:
             self.lbl_z.pack_forget()
             self.z_dd.pack_forget()

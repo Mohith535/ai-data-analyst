@@ -52,9 +52,10 @@ def main():
             "1. Is MySQL Server installed and running?\n"
             "2. Is the password in .env correct?\n"
             "3. Is the MySQL service started?\n\n"
-            "The app will now exit."
+            "Tip: Run 'setup.bat' or 'python setup.py' to run the automatic configuration wizard."
         )
         temp.destroy()
+        print("\n[TIP] Run 'setup.bat' or 'python setup.py' to automatically configure your environment!\n")
         sys.exit(1)
     
     print("[STARTUP] Database ready! Launching GUI...")
