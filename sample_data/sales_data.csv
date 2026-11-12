@@ -1,0 +1,52 @@
+order_id,product,category,quantity,price,total,date,region
+1001,Laptop,Electronics,2,45000,90000,2024-01-15,South
+1002,Mouse,Electronics,10,500,5000,2024-01-16,North
+1003,Desk Chair,Furniture,3,8000,24000,2024-01-17,West
+1004,Notebook,Stationery,50,40,2000,2024-01-18,East
+1005,Monitor,Electronics,4,15000,60000,2024-01-20,South
+1006,Keyboard,Electronics,8,1200,9600,2024-01-22,North
+1007,Bookshelf,Furniture,2,5000,10000,2024-01-25,West
+1008,Pen Set,Stationery,100,25,2500,2024-02-01,East
+1009,Headphones,Electronics,6,2000,12000,2024-02-03,South
+1010,Webcam,Electronics,5,3000,15000,2024-02-05,North
+1011,Standing Desk,Furniture,1,25000,25000,2024-02-10,West
+1012,Stapler,Stationery,30,150,4500,2024-02-12,East
+1013,Tablet,Electronics,3,20000,60000,2024-02-15,South
+1014,USB Hub,Electronics,12,800,9600,2024-02-18,North
+1015,Filing Cabinet,Furniture,2,6000,12000,2024-02-20,West
+1016,Marker Set,Stationery,40,60,2400,2024-02-22,East
+1017,Printer,Electronics,2,12000,24000,2024-03-01,South
+1018,Mouse Pad,Electronics,20,300,6000,2024-03-05,North
+1019,Office Table,Furniture,1,18000,18000,2024-03-10,West
+1020,Glue Stick,Stationery,60,20,1200,2024-03-12,East
+1021,Smartphone,Electronics,5,30000,150000,2024-03-15,South
+1022,Router,Electronics,3,4000,12000,2024-03-18,North
+1023,Ergonomic Chair,Furniture,2,15000,30000,2024-03-20,West
+1024,Paper Ream,Stationery,80,200,16000,2024-03-22,East
+1025,External SSD,Electronics,7,5000,35000,2024-03-25,South
+1026,Speakers,Electronics,4,3500,14000,2024-04-01,North
+1027,Coat Rack,Furniture,3,2500,7500,2024-04-05,West
+1028,Scissors,Stationery,25,80,2000,2024-04-08,East
+1029,Power Bank,Electronics,10,1500,15000,2024-04-10,South
+1030,Cable Organizer,Electronics,15,250,3750,2024-04-12,North
+1031,Whiteboard,Furniture,2,3000,6000,2024-04-15,West
+1032,Binder,Stationery,35,120,4200,2024-04-18,East
+1033,Laptop Stand,Electronics,6,2500,15000,2024-04-20,South
+1034,HDMI Cable,Electronics,20,400,8000,2024-04-22,North
+1035,Bean Bag,Furniture,4,3500,14000,2024-04-25,West
+1036,Tape Dispenser,Stationery,18,100,1800,2024-05-01,East
+1037,Graphics Card,Electronics,2,35000,70000,2024-05-05,South
+1038,Ethernet Cable,Electronics,30,150,4500,2024-05-08,North
+1039,Magazine Rack,Furniture,3,1800,5400,2024-05-10,West
+1040,Highlighter Set,Stationery,45,50,2250,2024-05-12,East
+1041,SSD Drive,Electronics,8,4500,36000,2024-05-15,South
+1042,Charger,Electronics,15,600,9000,2024-05-18,North
+1043,Desk Lamp,Furniture,5,1200,6000,2024-05-20,West
+1044,Envelope Pack,Stationery,50,30,1500,2024-05-22,East
+1045,RAM Module,Electronics,4,3000,12000,2024-05-25,South
+1046,Docking Station,Electronics,3,8000,24000,2024-06-01,North
+1047,Footrest,Furniture,6,1500,9000,2024-06-05,West
+1048,Correction Pen,Stationery,40,35,1400,2024-06-08,East
+1049,Mechanical Keyboard,Electronics,5,5500,27500,2024-06-10,South
+1050,Monitor Arm,Electronics,3,4000,12000,2024-06-12,North
+
