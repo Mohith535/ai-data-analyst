@@ -1,11 +1,17 @@
 """
-chat_tab.py — AI Chat Tab UI (macOS Glass Polish)
-===================================================
+chat_tab.py — AI Chat Tab UI (macOS Glass Polish + High-Legibility Typography)
+================================================================================
+Updates:
+  - Generous padding and visual breathing room.
+  - Large, crystal-clear typography for AI Insights (no more squinting).
+  - Executive PDF Dossier Export Button (combines AI insight, SQL, Table, and Chart).
+  - Interactive auto-chart & table split view with scrollbars.
 """
 
+import os
 import threading
 import customtkinter as ctk
-from tkinter import messagebox
+from tkinter import messagebox, filedialog
 import tkinter.ttk as ttk
 import matplotlib
 matplotlib.use('Agg')
@@ -14,34 +20,40 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import db
 import charts
 import ai_chat
+import report_generator
 
 
 class ChatTab:
-    """Manages the AI Chat tab with threading, auto-visualization, and text summary toggle."""
+    """Manages the AI Chat tab with threading, auto-visualization, text summary, and PDF export."""
     
     def __init__(self, parent):
         self.parent = parent
         self.current_canvas = None
+        self.current_fig = None
+        self.current_df = None
+        self.current_sql = None
+        self.current_question = None
+        self.current_summary = None
         self.tree = None
         
-        # --- Top Controls Card ---
-        self.top_frame = ctk.CTkFrame(parent, fg_color="#18191E", corner_radius=12)
+        # === TOP CONTROLS SECTION ===
+        self.top_frame = ctk.CTkFrame(parent, fg_color="#18191E", corner_radius=14)
         self.top_frame.pack(fill="x", padx=16, pady=(12, 6))
         
         row1 = ctk.CTkFrame(self.top_frame, fg_color="transparent")
-        row1.pack(fill="x", padx=12, pady=(10, 6))
+        row1.pack(fill="x", padx=14, pady=(12, 6))
         
-        ctk.CTkLabel(row1, text="Active Context:", font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", padx=(0, 6))
+        ctk.CTkLabel(row1, text="Active Context:", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold")).pack(side="left", padx=(0, 6))
         self.table_var = ctk.StringVar(value="Select a table")
         self.table_dropdown = ctk.CTkOptionMenu(
             row1, variable=self.table_var, values=["Select a table"],
-            width=200, fg_color="#262A34"
+            width=210, height=32, fg_color="#262A34"
         )
         self.table_dropdown.pack(side="left", padx=(0, 10))
         
         self.btn_refresh = ctk.CTkButton(
             row1, text="🔄 Refresh", command=self._refresh_tables,
-            width=90, height=30, fg_color="#2E3442", hover_color="#3B4254"
+            width=90, height=32, fg_color="#2E3442", hover_color="#3B4254"
         )
         self.btn_refresh.pack(side="left", padx=(0, 20))
         
@@ -53,119 +65,134 @@ class ChatTab:
             variable=self.summary_mode_var,
             onvalue=True,
             offvalue=False,
-            font=ctk.CTkFont(size=12, weight="bold"),
+            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
             progress_color="#10B981"
         )
         self.switch_summary.pack(side="left", padx=(0, 15))
         
+        # PDF Export Button (Top Right)
+        self.btn_export_pdf = ctk.CTkButton(
+            row1,
+            text="📄 Export PDF Dossier",
+            command=self.export_pdf_report,
+            width=160,
+            height=32,
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+            fg_color="#8B5CF6",
+            hover_color="#7C3AED",
+            state="disabled"
+        )
+        self.btn_export_pdf.pack(side="right")
+        
         # Row 2: Prompt bar
         row2 = ctk.CTkFrame(self.top_frame, fg_color="transparent")
-        row2.pack(fill="x", padx=12, pady=(4, 10))
+        row2.pack(fill="x", padx=14, pady=(4, 12))
         
         self.entry_question = ctk.CTkEntry(
             row2,
             placeholder_text="Ask any question in English (e.g. 'Show total sales by category' or 'Explain customer risk counts')...",
-            font=ctk.CTkFont(size=13),
-            height=42,
+            font=ctk.CTkFont(family="Segoe UI", size=14),
+            height=46,
             fg_color="#22252D",
             border_color="#2E3442"
         )
-        self.entry_question.pack(side="left", fill="x", expand=True, padx=(0, 10))
+        self.entry_question.pack(side="left", fill="x", expand=True, padx=(0, 12))
         self.entry_question.bind("<Return>", lambda event: self.ask_ai())
         
         self.btn_ask = ctk.CTkButton(
             row2,
             text="✨ Ask Analyst",
             command=self.ask_ai,
-            width=150,
-            height=42,
-            font=ctk.CTkFont(size=13, weight="bold"),
+            width=160,
+            height=46,
+            font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"),
             fg_color="#3B82F6",
             hover_color="#2563EB"
         )
         self.btn_ask.pack(side="left")
         
         # --- AI Insights & SQL Output Card ---
-        self.response_frame = ctk.CTkFrame(parent, fg_color="#18191E", corner_radius=12)
+        self.response_frame = ctk.CTkFrame(parent, fg_color="#18191E", corner_radius=14)
         self.response_frame.pack(fill="x", padx=16, pady=4)
         
         resp_header = ctk.CTkFrame(self.response_frame, fg_color="transparent")
-        resp_header.pack(fill="x", padx=12, pady=(6, 2))
+        resp_header.pack(fill="x", padx=14, pady=(8, 4))
         
         ctk.CTkLabel(
             resp_header,
             text="🤖 AI Analyst Insight & Synthesized SQL",
-            font=ctk.CTkFont(size=12, weight="bold"),
+            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
             text_color="#60A5FA"
         ).pack(side="left")
         
         self.lbl_status = ctk.CTkLabel(
-            resp_header, text="Ready", font=ctk.CTkFont(size=11), text_color="#94A3B8"
+            resp_header, text="Ready", font=ctk.CTkFont(family="Segoe UI", size=12), text_color="#94A3B8"
         )
         self.lbl_status.pack(side="right")
         
-        # Summary Box
+        # Large, highly legible AI Summary Box
         self.txt_summary = ctk.CTkTextbox(
             self.response_frame,
-            height=54,
-            font=ctk.CTkFont(size=12),
+            height=70,
+            font=ctk.CTkFont(family="Segoe UI", size=14),
             fg_color="#141820",
-            text_color="#F1F5F9",
+            text_color="#F8FAFC",
             wrap="word",
-            corner_radius=8
+            corner_radius=10,
+            spacing1=3, spacing2=2, spacing3=3
         )
-        self.txt_summary.pack(fill="x", padx=12, pady=(0, 4))
+        self.txt_summary.pack(fill="x", padx=14, pady=(0, 6))
         self.txt_summary.insert("1.0", "💡 Type a question above to receive instant conversational insights.")
         self.txt_summary.configure(state="disabled")
         
         # SQL Box
         self.txt_sql = ctk.CTkTextbox(
             self.response_frame,
-            height=36,
-            font=ctk.CTkFont(family="Consolas", size=11),
+            height=38,
+            font=ctk.CTkFont(family="Consolas", size=12),
             fg_color="#0F1115",
             text_color="#34D399",
             corner_radius=8
         )
-        self.txt_sql.pack(fill="x", padx=12, pady=(0, 8))
+        self.txt_sql.pack(fill="x", padx=14, pady=(0, 10))
         self.txt_sql.insert("1.0", "-- Generated MySQL query will appear here...")
         self.txt_sql.configure(state="disabled")
         
         # --- Split Result Canvas Card ---
         self.output_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        self.output_frame.pack(fill="both", expand=True, padx=16, pady=(4, 14))
+        self.output_frame.pack(fill="both", expand=True, padx=16, pady=(4, 12))
         
         # Left Pane: Table
-        self.table_box = ctk.CTkFrame(self.output_frame, fg_color="#18191E", corner_radius=12)
+        self.table_box = ctk.CTkFrame(self.output_frame, fg_color="#18191E", corner_radius=14)
         self.table_box.pack(side="left", fill="both", expand=True, padx=(0, 6))
         
         ctk.CTkLabel(
             self.table_box, text="📋 Query Output",
-            font=ctk.CTkFont(size=12, weight="bold"), text_color="#E2E8F0"
-        ).pack(anchor="w", padx=12, pady=6)
+            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), text_color="#E2E8F0"
+        ).pack(anchor="w", padx=14, pady=8)
         
         self.tree_container = ctk.CTkFrame(self.table_box, fg_color="transparent")
-        self.tree_container.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        self.tree_container.pack(fill="both", expand=True, padx=10, pady=(0, 10))
         
         self.table_placeholder = ctk.CTkLabel(
-            self.tree_container, text="Data records will populate here.", text_color="#64748B"
+            self.tree_container, text="Data records will populate here.", font=ctk.CTkFont(size=14), text_color="#64748B"
         )
         self.table_placeholder.pack(expand=True)
         
         # Right Pane: Auto-Chart
-        self.chart_box = ctk.CTkFrame(self.output_frame, fg_color="#18191E", corner_radius=12)
+        self.chart_box = ctk.CTkFrame(self.output_frame, fg_color="#18191E", corner_radius=14)
         self.chart_box.pack(side="right", fill="both", expand=True, padx=(6, 0))
         
         ctk.CTkLabel(
             self.chart_box, text="📈 Automated Visualization",
-            font=ctk.CTkFont(size=12, weight="bold"), text_color="#E2E8F0"
-        ).pack(anchor="w", padx=12, pady=6)
+            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), text_color="#E2E8F0"
+        ).pack(anchor="w", padx=14, pady=8)
         
         self.chart_container = ctk.CTkFrame(self.chart_box, fg_color="transparent")
-        self.chart_container.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        self.chart_container.pack(fill="both", expand=True, padx=10, pady=(0, 10))
         
         self.chart_placeholder = ctk.CTkLabel(
-            self.chart_container, text="Chart will auto-render from result dimensions.", text_color="#64748B"
+            self.chart_container, text="Chart will auto-render from result dimensions.", font=ctk.CTkFont(size=14), text_color="#64748B"
         )
         self.chart_placeholder.pack(expand=True)
         
@@ -190,7 +217,9 @@ class ChatTab:
             messagebox.showwarning("Notice", "Select table context and type a query.")
             return
             
+        self.current_question = question
         self.btn_ask.configure(state="disabled", text="⏳ Synthesizing...")
+        self.btn_export_pdf.configure(state="disabled")
         self.lbl_status.configure(text="Translating to SQL...", text_color="#F59E0B")
         
         worker = threading.Thread(
@@ -214,7 +243,7 @@ class ChatTab:
             
         text_summary = None
         if do_summary:
-            self.parent.after(0, lambda: self.lbl_status.configure(text="Generating Natural Language Takeaway...", text_color="#38BDF8"))
+            self.parent.after(0, lambda: self.lbl_status.configure(text="Synthesizing Insight...", text_color="#38BDF8"))
             text_summary = ai_chat.summarize_results(question, df)
             
         self.parent.after(0, self._update_ui_with_results, sql, df, text_summary)
@@ -225,7 +254,12 @@ class ChatTab:
         messagebox.showerror("AI Query Error", error_message)
         
     def _update_ui_with_results(self, sql, df, text_summary):
+        self.current_sql = sql
+        self.current_df = df
+        self.current_summary = text_summary
+        
         self.btn_ask.configure(state="normal", text="✨ Ask Analyst")
+        self.btn_export_pdf.configure(state="normal")
         self.lbl_status.configure(text=f"Completed: {len(df)} row(s)", text_color="#10B981")
         
         self.txt_summary.configure(state="normal")
@@ -264,14 +298,14 @@ class ChatTab:
             background="#1E2026",
             foreground="#E2E8F0",
             fieldbackground="#1E2026",
-            rowheight=26,
-            font=('Segoe UI', 9)
+            rowheight=28,
+            font=('Segoe UI', 10)
         )
         style.configure(
             "Treeview.Heading",
             background="#282D37",
             foreground="#F8FAFC",
-            font=('Segoe UI', 10, 'bold')
+            font=('Segoe UI', 11, 'bold')
         )
         style.map("Treeview", background=[("selected", "#3B82F6")])
         
@@ -281,7 +315,7 @@ class ChatTab:
         
         for col in columns:
             self.tree.heading(col, text=col, anchor="w")
-            self.tree.column(col, width=max(80, min(180, len(str(col)) * 11 + 20)), anchor="w")
+            self.tree.column(col, width=max(90, min(200, len(str(col)) * 12 + 25)), anchor="w")
             
         scroll_y.pack(side="right", fill="y")
         scroll_x.pack(side="bottom", fill="x")
@@ -299,6 +333,8 @@ class ChatTab:
         self.chart_placeholder.pack_forget()
         
         fig = charts.create_auto_chart(df, title="AI Analysis Result")
+        self.current_fig = fig
+        
         if fig is None:
             self.chart_placeholder.configure(text="No suitable columns found for auto-charting.")
             self.chart_placeholder.pack(expand=True)
@@ -307,3 +343,30 @@ class ChatTab:
         self.current_canvas = FigureCanvasTkAgg(fig, master=self.chart_container)
         self.current_canvas.draw()
         self.current_canvas.get_tk_widget().pack(fill="both", expand=True, padx=4, pady=4)
+        
+    def export_pdf_report(self):
+        """Generates an executive PDF report file."""
+        if self.current_df is None or not self.current_sql:
+            messagebox.showwarning("Notice", "Execute an analysis query first.")
+            return
+            
+        filepath = filedialog.asksaveasfilename(
+            defaultextension=".pdf",
+            filetypes=[("PDF Document", "*.pdf")],
+            initialfile=f"Analytics_Report_{self.table_var.get()}.pdf"
+        )
+        if not filepath:
+            return
+            
+        try:
+            report_generator.generate_executive_pdf(
+                filepath,
+                self.current_question or "Ad-hoc Query",
+                self.current_sql,
+                self.current_summary or "Execution Results",
+                self.current_df,
+                self.current_fig
+            )
+            messagebox.showinfo("Export Successful", f"Executive report saved:\n{filepath}")
+        except Exception as e:
+            messagebox.showerror("Export Failed", f"Could not create PDF:\n{e}")

@@ -86,3 +86,4 @@ ai_data_analyst/
 **K Mohith Kannan**  
 B.Tech CSE (AI & ML) — SRMIST Kattankulathur, Chennai  
 *Aspiring AI & Software Engineer / Entrepreneur*
+

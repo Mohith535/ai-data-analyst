@@ -3,9 +3,10 @@ charts.py — Polished Matplotlib Chart Helpers (Apple / Glass Modern Aesthetic)
 ================================================================================
 Theme Highlights:
   - Deep dark background (#18191E) matching CustomTkinter UI
-  - Refined modern color palette (iOS / macOS inspired blue, orange, emerald, purple, cyan)
+  - Refined modern color palette (iOS / macOS inspired blue, emerald, amber, rose, violet)
   - Subtle grid lines (#2B2F3A) with zero visual clutter
   - Clean typographic hierarchy
+  - Auto-downsampling & smart binning to prevent overcrowding on large tables
 """
 
 import matplotlib
@@ -17,7 +18,6 @@ import numpy as np
 
 # macOS Dark Theme Palette
 DARK_BG = '#18191E'
-SURFACE_BG = '#18191E'
 DARK_FG = '#E2E8F0'
 GRID_COLOR = '#262934'
 
@@ -45,7 +45,6 @@ def _apply_dark_style(fig, ax):
     ax.yaxis.label.set_color(DARK_FG)
     ax.title.set_color('#FFFFFF')
     
-    # Clean, subtle spines
     for spine in ax.spines.values():
         spine.set_edgecolor(GRID_COLOR)
         spine.set_linewidth(1.2)
@@ -63,7 +62,7 @@ def create_bar_chart(df, x_col, y_col, title=None):
         else:
             plot_df = plot_df.head(18)
     
-    bars = ax.bar(
+    ax.bar(
         range(len(plot_df)),
         plot_df[y_col],
         color=ACCENT_COLORS[:len(plot_df)],
@@ -92,24 +91,43 @@ def create_bar_chart(df, x_col, y_col, title=None):
 
 
 def create_line_chart(df, x_col, y_col, title=None):
-    """Clean line chart with glowing markers and subtle grid."""
+    """
+    Clean line chart with smart point downsampling.
+    Prevents overcrowded vertical bars when plotting hundreds of records.
+    """
     fig, ax = plt.subplots(figsize=(7.5, 4.8), dpi=100)
     _apply_dark_style(fig, ax)
     
+    plot_df = df.copy()
+    
+    # Downsample if too many points to avoid crowded visual noise
+    total_pts = len(plot_df)
+    if total_pts > 60:
+        step = max(1, total_pts // 50)
+        plot_df = plot_df.iloc[::step].copy()
+    
+    show_markers = len(plot_df) <= 30
+    
     ax.plot(
-        df[x_col].astype(str),
-        df[y_col],
+        plot_df[x_col].astype(str),
+        plot_df[y_col],
         color='#3B82F6',
-        linewidth=2.6,
-        marker='o',
-        markersize=6,
+        linewidth=2.4,
+        marker='o' if show_markers else None,
+        markersize=5,
         markerfacecolor='#10B981',
         markeredgecolor='#FFFFFF',
-        markeredgewidth=1.2,
+        markeredgewidth=1.0,
         alpha=0.95
     )
     
-    if len(df) > 8:
+    # Label formatting for X axis
+    n_labels = len(plot_df)
+    if n_labels > 10:
+        ticks_to_show = np.linspace(0, n_labels - 1, 8, dtype=int)
+        ax.set_xticks(ticks_to_show)
+        ax.set_xticklabels([str(plot_df[x_col].iloc[i]) for i in ticks_to_show], rotation=35, ha='right', fontsize=9)
+    else:
         plt.xticks(rotation=35, ha='right', fontsize=9)
     
     ax.set_xlabel(x_col, fontsize=10, labelpad=8)
@@ -142,7 +160,7 @@ def create_pie_chart(df, label_col, value_col, title=None):
         autopct='%1.1f%%',
         startangle=140,
         pctdistance=0.75,
-        wedgeprops=dict(width=0.6, edgecolor=DARK_BG, linewidth=2),  # Modern Donut Look!
+        wedgeprops=dict(width=0.6, edgecolor=DARK_BG, linewidth=2),
         textprops={'color': DARK_FG, 'fontsize': 9}
     )
     
@@ -188,19 +206,27 @@ def create_auto_chart(df, title="AI Analysis Result"):
     text_cols = df.select_dtypes(include=['object']).columns.tolist()
     numeric_cols = [c for c in numeric_cols if '_id' not in c.lower()]
     
+    # 1. Single column
     if len(df.columns) == 1:
         if numeric_cols:
             return create_histogram(df, numeric_cols[0], title=title)
         return None
         
+    # 2. Categorical + Numeric
     if text_cols and numeric_cols:
         if len(df) <= 6:
             return create_pie_chart(df, text_cols[0], numeric_cols[0], title=title)
         return create_bar_chart(df, text_cols[0], numeric_cols[0], title=title)
         
+    # 3. Two Numeric columns:
+    # If the rows exceed 40, a histogram distribution of the metric is far more informative than a massive point mesh
     if len(numeric_cols) >= 2:
+        if len(df) > 40:
+            # Show distribution of the target metric
+            return create_histogram(df, numeric_cols[1], bins=25, title=f"Distribution of {numeric_cols[1]}")
         return create_line_chart(df, numeric_cols[0], numeric_cols[1], title=title)
         
+    # 4. Fallback
     cols = list(df.columns)
     if len(cols) >= 2:
         return create_bar_chart(df, cols[0], cols[1], title=title)
