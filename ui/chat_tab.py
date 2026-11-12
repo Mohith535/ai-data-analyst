@@ -21,6 +21,7 @@ import db
 import charts
 import ai_chat
 import report_generator
+import history_manager
 
 
 class ChatTab:
@@ -34,6 +35,7 @@ class ChatTab:
         self.current_sql = None
         self.current_question = None
         self.current_summary = None
+        self.on_query_success = None  # Callback to notify parent app
         self.tree = None
         
         # --- Top Filter & Action Bar ---
@@ -290,6 +292,19 @@ class ChatTab:
         
         self._display_table(df)
         self._display_chart(df)
+        
+        # Save session to persistent history
+        try:
+            history_manager.save_history_item(
+                self.table_var.get(),
+                self.current_question,
+                sql,
+                text_summary or "Direct query result"
+            )
+            if self.on_query_success:
+                self.on_query_success()
+        except Exception as e:
+            print(f"[HISTORY LOG ERROR] {e}")
         
     def _display_table(self, df):
         if self.tree is not None:
