@@ -1,12 +1,10 @@
 """
-chat_tab.py — AI Chat Tab UI (Permanent AI Teacher / Insight Mode)
-====================================================================
+chat_tab.py — AI Chat Tab UI (Synchronized with Global Settings)
+==================================================================
 Highlights:
-  - Permanent AI Teacher / Insight Mode: Every query automatically receives
-    a plain-English takeaway explaining the findings and what the numbers mean.
-  - Large, highly legible typography with generous line-height.
-  - Executive PDF Dossier export.
-  - Live syntax-highlighted SQL generation.
+  - Dynamically reads `ai_teacher_mode` and `auto_chart_enabled` from `settings_manager`
+  - Self-healing Text-to-SQL compiler with automatic fallback
+  - Dedicated PDF Dossier export
 """
 
 import threading
@@ -22,10 +20,11 @@ import charts
 import ai_chat
 import report_generator
 import history_manager
+import settings_manager
 
 
 class ChatTab:
-    """Manages the AI Chat tab with threading, auto-visualization, and AI Teacher insights."""
+    """Manages the AI Chat tab with threading, auto-visualization, and settings integration."""
     
     def __init__(self, parent):
         self.parent = parent
@@ -35,7 +34,7 @@ class ChatTab:
         self.current_sql = None
         self.current_question = None
         self.current_summary = None
-        self.on_query_success = None  # Callback to notify parent app
+        self.on_query_success = None
         self.tree = None
         
         # --- Top Filter & Action Bar ---
@@ -66,10 +65,10 @@ class ChatTab:
         )
         self.btn_refresh.pack(side="left", padx=(0, 20))
         
-        # Teacher Mode Active Badge
+        # Teacher Mode Status Badge
         self.badge_teacher = ctk.CTkLabel(
             row1,
-            text="🎓 AI Teacher Mode: ACTIVE (Insights & Plain-English Explanations)",
+            text="🎓 AI Teacher Mode: ACTIVE",
             font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
             text_color="#34D399",
             fg_color="#13241C",
@@ -104,7 +103,7 @@ class ChatTab:
         
         self.entry_question = ctk.CTkEntry(
             prompt_inner,
-            placeholder_text="Ask any question in English (e.g. 'What is the best here?' or 'Show total sales by category')...",
+            placeholder_text="Ask any question in English (e.g. 'Give me an overview of this file' or 'Show total sales by category')...",
             font=ctk.CTkFont(family="Segoe UI", size=14),
             height=46,
             fg_color="#18191E",
@@ -145,7 +144,6 @@ class ChatTab:
         )
         self.lbl_status.pack(side="right")
         
-        # Spacious, high-legibility Insight Box
         self.txt_summary = ctk.CTkTextbox(
             self.response_frame,
             height=95,
@@ -159,7 +157,7 @@ class ChatTab:
             spacing1=4, spacing2=3, spacing3=4
         )
         self.txt_summary.pack(fill="x", padx=16, pady=(0, 8))
-        self.txt_summary.insert("1.0", "💡 Type a question above to receive instant conversational insights and plain-English takeaways.")
+        self.txt_summary.insert("1.0", "💡 Type a question above to receive instant conversational insights.")
         self.txt_summary.configure(state="disabled")
         
         # SQL Box
@@ -214,7 +212,24 @@ class ChatTab:
         self.chart_placeholder.pack(expand=True)
         
         self._refresh_tables()
+        self.sync_settings_state()
         
+    def sync_settings_state(self):
+        """Update badge based on global settings."""
+        teacher_on = settings_manager.get_setting("ai_teacher_mode", True)
+        if teacher_on:
+            self.badge_teacher.configure(
+                text="🎓 AI Teacher Mode: ACTIVE",
+                text_color="#34D399",
+                fg_color="#13241C"
+            )
+        else:
+            self.badge_teacher.configure(
+                text="⚡ Direct SQL Mode (Teacher OFF)",
+                text_color="#94A3B8",
+                fg_color="#1E2024"
+            )
+            
     def _refresh_tables(self):
         tables = db.list_tables()
         if tables:
@@ -257,9 +272,11 @@ class ChatTab:
             self.parent.after(0, self._handle_error, f"SQL Execution Failed:\n{db_err}\n\nQuery:\n{sql}")
             return
             
-        # Permanent AI Teacher Mode: Always synthesize plain-English takeaways
-        self.parent.after(0, lambda: self.lbl_status.configure(text="Synthesizing Insight...", text_color="#818CF8"))
-        text_summary = ai_chat.summarize_results(question, df)
+        teacher_on = settings_manager.get_setting("ai_teacher_mode", True)
+        text_summary = None
+        if teacher_on:
+            self.parent.after(0, lambda: self.lbl_status.configure(text="Synthesizing Insight...", text_color="#818CF8"))
+            text_summary = ai_chat.summarize_results(question, df)
             
         self.parent.after(0, self._update_ui_with_results, sql, df, text_summary)
         
@@ -282,7 +299,7 @@ class ChatTab:
         if text_summary:
             self.txt_summary.insert("1.0", f"💡 {text_summary}")
         else:
-            self.txt_summary.insert("1.0", "Query executed successfully.")
+            self.txt_summary.insert("1.0", "Query executed successfully. (AI Teacher mode is disabled in Settings).")
         self.txt_summary.configure(state="disabled")
         
         self.txt_sql.configure(state="normal")
@@ -291,9 +308,18 @@ class ChatTab:
         self.txt_sql.configure(state="disabled")
         
         self._display_table(df)
-        self._display_chart(df)
         
-        # Save session to persistent history
+        # Check auto-chart setting
+        charts_on = settings_manager.get_setting("auto_chart_enabled", True)
+        if charts_on:
+            self._display_chart(df)
+        else:
+            if self.current_canvas is not None:
+                self.current_canvas.get_tk_widget().destroy()
+                self.current_canvas = None
+            self.chart_placeholder.configure(text="Automated charting disabled in Settings.")
+            self.chart_placeholder.pack(expand=True)
+            
         try:
             history_manager.save_history_item(
                 self.table_var.get(),
@@ -304,8 +330,8 @@ class ChatTab:
             if self.on_query_success:
                 self.on_query_success()
         except Exception as e:
-            print(f"[HISTORY LOG ERROR] {e}")
-        
+            print(f"[HISTORY ERROR] {e}")
+            
     def _display_table(self, df):
         if self.tree is not None:
             self.tree.destroy()
