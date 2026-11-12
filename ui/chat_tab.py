@@ -1,12 +1,12 @@
 """
-chat_tab.py — AI Chat Tab UI (Minimalist Linear Theme & Expanded Spacing)
-==========================================================================
+chat_tab.py — AI Chat Tab UI (Permanent AI Teacher / Insight Mode)
+====================================================================
 Highlights:
-  - Generous full-bleed card layout
-  - Clean floating prompt input bar with glowing focus borders
-  - Large, elegant AI takeaway card (no cramped scrolling boxes)
-  - Dedicated one-click PDF Dossier exporter
-  - Clean split output for tables & charts
+  - Permanent AI Teacher / Insight Mode: Every query automatically receives
+    a plain-English takeaway explaining the findings and what the numbers mean.
+  - Large, highly legible typography with generous line-height.
+  - Executive PDF Dossier export.
+  - Live syntax-highlighted SQL generation.
 """
 
 import threading
@@ -24,7 +24,7 @@ import report_generator
 
 
 class ChatTab:
-    """Manages the AI Chat tab with threading, auto-visualization, text summary, and PDF export."""
+    """Manages the AI Chat tab with threading, auto-visualization, and AI Teacher insights."""
     
     def __init__(self, parent):
         self.parent = parent
@@ -64,18 +64,17 @@ class ChatTab:
         )
         self.btn_refresh.pack(side="left", padx=(0, 20))
         
-        # Natural Language Summary Switch
-        self.summary_mode_var = ctk.BooleanVar(value=True)
-        self.switch_summary = ctk.CTkSwitch(
+        # Teacher Mode Active Badge
+        self.badge_teacher = ctk.CTkLabel(
             row1,
-            text="💡 Natural Language Insight Mode",
-            variable=self.summary_mode_var,
-            onvalue=True,
-            offvalue=False,
-            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
-            progress_color="#5E6AD2"  # Linear Purple
+            text="🎓 AI Teacher Mode: ACTIVE (Insights & Plain-English Explanations)",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            text_color="#34D399",
+            fg_color="#13241C",
+            corner_radius=8,
+            padx=10, pady=4
         )
-        self.switch_summary.pack(side="left", padx=(0, 15))
+        self.badge_teacher.pack(side="left", padx=(0, 15))
         
         # PDF Export Button (Top Right)
         self.btn_export_pdf = ctk.CTkButton(
@@ -94,7 +93,7 @@ class ChatTab:
         )
         self.btn_export_pdf.pack(side="right")
         
-        # --- Prompt Bar (Linear Style Floating Search Input) ---
+        # --- Prompt Bar (Linear Floating Input Bar) ---
         prompt_card = ctk.CTkFrame(parent, fg_color="#121316", corner_radius=12)
         prompt_card.pack(fill="x", padx=16, pady=4)
         
@@ -103,7 +102,7 @@ class ChatTab:
         
         self.entry_question = ctk.CTkEntry(
             prompt_inner,
-            placeholder_text="Ask any question in English (e.g. 'Show total sales by category' or 'Explain customer risk counts')...",
+            placeholder_text="Ask any question in English (e.g. 'What is the best here?' or 'Show total sales by category')...",
             font=ctk.CTkFont(family="Segoe UI", size=14),
             height=46,
             fg_color="#18191E",
@@ -125,7 +124,7 @@ class ChatTab:
         )
         self.btn_ask.pack(side="left")
         
-        # --- AI Insights & SQL Output Card (Spacious, Roomy Layout) ---
+        # --- AI Insights & SQL Output Card ---
         self.response_frame = ctk.CTkFrame(parent, fg_color="#121316", corner_radius=12)
         self.response_frame.pack(fill="x", padx=16, pady=6)
         
@@ -144,7 +143,7 @@ class ChatTab:
         )
         self.lbl_status.pack(side="right")
         
-        # Roomy AI Insight Box (Expanded height for comfortable reading)
+        # Spacious, high-legibility Insight Box
         self.txt_summary = ctk.CTkTextbox(
             self.response_frame,
             height=95,
@@ -158,7 +157,7 @@ class ChatTab:
             spacing1=4, spacing2=3, spacing3=4
         )
         self.txt_summary.pack(fill="x", padx=16, pady=(0, 8))
-        self.txt_summary.insert("1.0", "💡 Type a question above to receive instant conversational insights.")
+        self.txt_summary.insert("1.0", "💡 Type a question above to receive instant conversational insights and plain-English takeaways.")
         self.txt_summary.configure(state="disabled")
         
         # SQL Box
@@ -227,7 +226,6 @@ class ChatTab:
     def ask_ai(self):
         table = self.table_var.get()
         question = self.entry_question.get().strip()
-        do_summary = self.summary_mode_var.get()
         
         if table in ("Select a table", "No tables found") or not question:
             messagebox.showwarning("Notice", "Select table context and type a query.")
@@ -240,12 +238,12 @@ class ChatTab:
         
         worker = threading.Thread(
             target=self._process_ai_query,
-            args=(table, question, do_summary),
+            args=(table, question),
             daemon=True
         )
         worker.start()
         
-    def _process_ai_query(self, table, question, do_summary):
+    def _process_ai_query(self, table, question):
         schema = db.get_table_schema(table)
         sql, err = ai_chat.generate_sql(table, schema, question)
         if err:
@@ -257,10 +255,9 @@ class ChatTab:
             self.parent.after(0, self._handle_error, f"SQL Execution Failed:\n{db_err}\n\nQuery:\n{sql}")
             return
             
-        text_summary = None
-        if do_summary:
-            self.parent.after(0, lambda: self.lbl_status.configure(text="Synthesizing Insight...", text_color="#818CF8"))
-            text_summary = ai_chat.summarize_results(question, df)
+        # Permanent AI Teacher Mode: Always synthesize plain-English takeaways
+        self.parent.after(0, lambda: self.lbl_status.configure(text="Synthesizing Insight...", text_color="#818CF8"))
+        text_summary = ai_chat.summarize_results(question, df)
             
         self.parent.after(0, self._update_ui_with_results, sql, df, text_summary)
         
@@ -283,7 +280,7 @@ class ChatTab:
         if text_summary:
             self.txt_summary.insert("1.0", f"💡 {text_summary}")
         else:
-            self.txt_summary.insert("1.0", "(Insight Mode is OFF. Toggle switch to view plain English summaries.)")
+            self.txt_summary.insert("1.0", "Query executed successfully.")
         self.txt_summary.configure(state="disabled")
         
         self.txt_sql.configure(state="normal")
@@ -361,7 +358,6 @@ class ChatTab:
         self.current_canvas.get_tk_widget().pack(fill="both", expand=True, padx=4, pady=4)
         
     def export_pdf_report(self):
-        """Generates an executive PDF report file."""
         if self.current_df is None or not self.current_sql:
             messagebox.showwarning("Notice", "Execute an analysis query first.")
             return

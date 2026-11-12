@@ -1,11 +1,11 @@
 """
-upload_tab.py — Dataset Ingestion Tab with Automated Data Hygiene Audit
-========================================================================
-Highlights:
-  - Clean CSV ingestion pipeline
-  - Instant Data Hygiene & Quality Audit Banner
-  - Missing value %, Duplicates, and IQR Outlier detection
-  - Scrollable high-contrast Treeview preview
+upload_tab.py — Dataset Ingestion Tab with Persistent Treeview & Data Profiling
+================================================================================
+Fix:
+  - Re-uses a single permanent Treeview container.
+  - Clears existing items and reconfigures column headings on every CSV load
+    instead of destroying/re-packing frames, guaranteeing that sequential file
+    loading always displays immediately.
 """
 
 import customtkinter as ctk
@@ -96,13 +96,17 @@ class UploadTab:
         self.table_frame = ctk.CTkFrame(parent, fg_color="#121316", corner_radius=12)
         self.table_frame.pack(fill="both", expand=True, padx=16, pady=(6, 12))
         
+        # Permanent inner frame
+        self.inner_table_box = ctk.CTkFrame(self.table_frame, fg_color="transparent")
+        self.inner_table_box.pack(fill="both", expand=True, padx=8, pady=8)
+        
         self.tree = None
         self.tree_scroll_y = None
         self.tree_scroll_x = None
         
         # Placeholder
         self.placeholder = ctk.CTkLabel(
-            self.table_frame,
+            self.inner_table_box,
             text="📊 Dataset Preview Canvas\n\nClick 'Choose CSV File' to inspect rows, schema & data quality.",
             font=ctk.CTkFont(family="Segoe UI", size=15),
             text_color="#64748B"
@@ -118,12 +122,17 @@ class UploadTab:
             return
             
         try:
-            df = pd.read_csv(filepath)
+            # Handle potential encoding issues (UTF-8, Latin-1 fallback)
+            try:
+                df = pd.read_csv(filepath)
+            except UnicodeDecodeError:
+                df = pd.read_csv(filepath, encoding='latin-1')
+                
             if df.empty:
                 messagebox.showwarning("Empty File", "This CSV file contains 0 rows.")
                 return
-            if len(df.columns) < 2:
-                messagebox.showwarning("Notice", "Dataset has only 1 column.")
+            if len(df.columns) < 1:
+                messagebox.showwarning("Notice", "Dataset has 0 columns.")
                 return
                 
             self.current_df = df
@@ -153,52 +162,61 @@ class UploadTab:
             messagebox.showerror("File Error", f"Failed to load file:\n{e}")
             
     def _display_dataframe(self, df, max_rows=500):
-        if self.tree is not None:
-            self.tree.destroy()
-        if self.tree_scroll_y is not None:
-            self.tree_scroll_y.destroy()
-        if self.tree_scroll_x is not None:
-            self.tree_scroll_x.destroy()
-            
+        # Hide placeholder
         self.placeholder.pack_forget()
         
-        inner = ctk.CTkFrame(self.table_frame, fg_color="transparent")
-        inner.pack(fill="both", expand=True, padx=8, pady=8)
-        
+        # If treeview and scrollbars don't exist yet, construct them permanently
+        if self.tree is None:
+            style = ttk.Style()
+            style.theme_use("default")
+            style.configure(
+                "Treeview",
+                background="#16181D",
+                foreground="#E2E8F0",
+                fieldbackground="#16181D",
+                rowheight=26,
+                font=('Segoe UI', 9)
+            )
+            style.configure(
+                "Treeview.Heading",
+                background="#22252C",
+                foreground="#F8FAFC",
+                font=('Segoe UI', 10, 'bold')
+            )
+            style.map("Treeview", background=[("selected", "#5E6AD2")])
+            
+            self.tree_scroll_y = ttk.Scrollbar(self.inner_table_box, orient="vertical")
+            self.tree_scroll_x = ttk.Scrollbar(self.inner_table_box, orient="horizontal")
+            
+            self.tree = ttk.Treeview(
+                self.inner_table_box,
+                show="headings",
+                height=18,
+                yscrollcommand=self.tree_scroll_y.set,
+                xscrollcommand=self.tree_scroll_x.set
+            )
+            
+            self.tree_scroll_y.configure(command=self.tree.yview)
+            self.tree_scroll_x.configure(command=self.tree.xview)
+            
+            self.tree_scroll_y.pack(side="right", fill="y")
+            self.tree_scroll_x.pack(side="bottom", fill="x")
+            self.tree.pack(fill="both", expand=True)
+            
+        # Clear any existing rows
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+            
+        # Re-map columns dynamically
         columns = list(df.columns)
-        self.tree = ttk.Treeview(inner, columns=columns, show="headings", height=18)
-        
-        style = ttk.Style()
-        style.theme_use("default")
-        style.configure(
-            "Treeview",
-            background="#16181D",
-            foreground="#E2E8F0",
-            fieldbackground="#16181D",
-            rowheight=26,
-            font=('Segoe UI', 9)
-        )
-        style.configure(
-            "Treeview.Heading",
-            background="#22252C",
-            foreground="#F8FAFC",
-            font=('Segoe UI', 10, 'bold')
-        )
-        style.map("Treeview", background=[("selected", "#5E6AD2")])
+        self.tree["columns"] = columns
         
         for col in columns:
-            self.tree.heading(col, text=col, anchor="w")
+            self.tree.heading(col, text=str(col), anchor="w")
             width = max(90, min(240, len(str(col)) * 11 + 25))
             self.tree.column(col, width=width, minwidth=80, anchor="w")
             
-        self.tree_scroll_y = ttk.Scrollbar(inner, orient="vertical", command=self.tree.yview)
-        self.tree_scroll_x = ttk.Scrollbar(inner, orient="horizontal", command=self.tree.xview)
-        self.tree.configure(yscrollcommand=self.tree_scroll_y.set, xscrollcommand=self.tree_scroll_x.set)
-        
-        self.tree_scroll_y.pack(side="right", fill="y")
-        self.tree_scroll_x.pack(side="bottom", fill="x")
-        self.tree.pack(fill="both", expand=True)
-        
+        # Populate rows
         display_df = df.head(max_rows)
         for _, row in display_df.iterrows():
             values = [str(v) if pd.notna(v) else "" for v in row]

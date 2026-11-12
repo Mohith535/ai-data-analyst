@@ -76,3 +76,4 @@ def profile_dataset(df):
         "duplicates": duplicate_rows,
         "columns": col_profiles
     }
+
