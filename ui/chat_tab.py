@@ -1,14 +1,14 @@
 """
-chat_tab.py — AI Chat Tab UI (macOS Glass Polish + High-Legibility Typography)
-================================================================================
-Updates:
-  - Generous padding and visual breathing room.
-  - Large, crystal-clear typography for AI Insights (no more squinting).
-  - Executive PDF Dossier Export Button (combines AI insight, SQL, Table, and Chart).
-  - Interactive auto-chart & table split view with scrollbars.
+chat_tab.py — AI Chat Tab UI (Minimalist Linear Theme & Expanded Spacing)
+==========================================================================
+Highlights:
+  - Generous full-bleed card layout
+  - Clean floating prompt input bar with glowing focus borders
+  - Large, elegant AI takeaway card (no cramped scrolling boxes)
+  - Dedicated one-click PDF Dossier exporter
+  - Clean split output for tables & charts
 """
 
-import os
 import threading
 import customtkinter as ctk
 from tkinter import messagebox, filedialog
@@ -36,28 +36,35 @@ class ChatTab:
         self.current_summary = None
         self.tree = None
         
-        # === TOP CONTROLS SECTION ===
-        self.top_frame = ctk.CTkFrame(parent, fg_color="#18191E", corner_radius=14)
-        self.top_frame.pack(fill="x", padx=16, pady=(12, 6))
+        # --- Top Filter & Action Bar ---
+        self.top_frame = ctk.CTkFrame(parent, fg_color="#121316", corner_radius=12)
+        self.top_frame.pack(fill="x", padx=16, pady=(10, 6))
         
         row1 = ctk.CTkFrame(self.top_frame, fg_color="transparent")
-        row1.pack(fill="x", padx=14, pady=(12, 6))
+        row1.pack(fill="x", padx=14, pady=10)
         
-        ctk.CTkLabel(row1, text="Active Context:", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold")).pack(side="left", padx=(0, 6))
+        ctk.CTkLabel(
+            row1, text="Context Table:",
+            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
+            text_color="#E2E8F0"
+        ).pack(side="left", padx=(0, 6))
+        
         self.table_var = ctk.StringVar(value="Select a table")
         self.table_dropdown = ctk.CTkOptionMenu(
             row1, variable=self.table_var, values=["Select a table"],
-            width=210, height=32, fg_color="#262A34"
+            width=210, height=34, fg_color="#1E2024", button_color="#2A2D34",
+            button_hover_color="#363A44", font=ctk.CTkFont(family="Segoe UI", size=12)
         )
         self.table_dropdown.pack(side="left", padx=(0, 10))
         
         self.btn_refresh = ctk.CTkButton(
             row1, text="🔄 Refresh", command=self._refresh_tables,
-            width=90, height=32, fg_color="#2E3442", hover_color="#3B4254"
+            width=90, height=34, fg_color="#1E2024", hover_color="#2A2D34",
+            text_color="#CBD5E1", font=ctk.CTkFont(family="Segoe UI", size=12)
         )
         self.btn_refresh.pack(side="left", padx=(0, 20))
         
-        # AI Text Summary Switch
+        # Natural Language Summary Switch
         self.summary_mode_var = ctk.BooleanVar(value=True)
         self.switch_summary = ctk.CTkSwitch(
             row1,
@@ -66,7 +73,7 @@ class ChatTab:
             onvalue=True,
             offvalue=False,
             font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
-            progress_color="#10B981"
+            progress_color="#5E6AD2"  # Linear Purple
         )
         self.switch_summary.pack(side="left", padx=(0, 15))
         
@@ -75,54 +82,61 @@ class ChatTab:
             row1,
             text="📄 Export PDF Dossier",
             command=self.export_pdf_report,
-            width=160,
-            height=32,
+            width=165,
+            height=34,
             font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
-            fg_color="#8B5CF6",
-            hover_color="#7C3AED",
+            fg_color="#1E2024",
+            hover_color="#5E6AD2",
+            border_width=1,
+            border_color="#2B2F38",
+            text_color="#E2E8F0",
             state="disabled"
         )
         self.btn_export_pdf.pack(side="right")
         
-        # Row 2: Prompt bar
-        row2 = ctk.CTkFrame(self.top_frame, fg_color="transparent")
-        row2.pack(fill="x", padx=14, pady=(4, 12))
+        # --- Prompt Bar (Linear Style Floating Search Input) ---
+        prompt_card = ctk.CTkFrame(parent, fg_color="#121316", corner_radius=12)
+        prompt_card.pack(fill="x", padx=16, pady=4)
+        
+        prompt_inner = ctk.CTkFrame(prompt_card, fg_color="transparent")
+        prompt_inner.pack(fill="x", padx=14, pady=10)
         
         self.entry_question = ctk.CTkEntry(
-            row2,
+            prompt_inner,
             placeholder_text="Ask any question in English (e.g. 'Show total sales by category' or 'Explain customer risk counts')...",
             font=ctk.CTkFont(family="Segoe UI", size=14),
             height=46,
-            fg_color="#22252D",
-            border_color="#2E3442"
+            fg_color="#18191E",
+            border_color="#262A32",
+            text_color="#F8FAFC"
         )
         self.entry_question.pack(side="left", fill="x", expand=True, padx=(0, 12))
         self.entry_question.bind("<Return>", lambda event: self.ask_ai())
         
         self.btn_ask = ctk.CTkButton(
-            row2,
+            prompt_inner,
             text="✨ Ask Analyst",
             command=self.ask_ai,
-            width=160,
+            width=150,
             height=46,
-            font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"),
-            fg_color="#3B82F6",
-            hover_color="#2563EB"
+            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
+            fg_color="#5E6AD2",
+            hover_color="#4F58B8"
         )
         self.btn_ask.pack(side="left")
         
-        # --- AI Insights & SQL Output Card ---
-        self.response_frame = ctk.CTkFrame(parent, fg_color="#18191E", corner_radius=14)
-        self.response_frame.pack(fill="x", padx=16, pady=4)
+        # --- AI Insights & SQL Output Card (Spacious, Roomy Layout) ---
+        self.response_frame = ctk.CTkFrame(parent, fg_color="#121316", corner_radius=12)
+        self.response_frame.pack(fill="x", padx=16, pady=6)
         
         resp_header = ctk.CTkFrame(self.response_frame, fg_color="transparent")
-        resp_header.pack(fill="x", padx=14, pady=(8, 4))
+        resp_header.pack(fill="x", padx=16, pady=(10, 4))
         
         ctk.CTkLabel(
             resp_header,
-            text="🤖 AI Analyst Insight & Synthesized SQL",
+            text="🤖 AI Analyst Insight & Synthesized Query",
             font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
-            text_color="#60A5FA"
+            text_color="#818CF8"
         ).pack(side="left")
         
         self.lbl_status = ctk.CTkLabel(
@@ -130,18 +144,20 @@ class ChatTab:
         )
         self.lbl_status.pack(side="right")
         
-        # Large, highly legible AI Summary Box
+        # Roomy AI Insight Box (Expanded height for comfortable reading)
         self.txt_summary = ctk.CTkTextbox(
             self.response_frame,
-            height=70,
+            height=95,
             font=ctk.CTkFont(family="Segoe UI", size=14),
-            fg_color="#141820",
-            text_color="#F8FAFC",
+            fg_color="#18191E",
+            text_color="#F1F5F9",
             wrap="word",
-            corner_radius=10,
-            spacing1=3, spacing2=2, spacing3=3
+            corner_radius=8,
+            border_width=1,
+            border_color="#22252D",
+            spacing1=4, spacing2=3, spacing3=4
         )
-        self.txt_summary.pack(fill="x", padx=14, pady=(0, 6))
+        self.txt_summary.pack(fill="x", padx=16, pady=(0, 8))
         self.txt_summary.insert("1.0", "💡 Type a question above to receive instant conversational insights.")
         self.txt_summary.configure(state="disabled")
         
@@ -150,11 +166,11 @@ class ChatTab:
             self.response_frame,
             height=38,
             font=ctk.CTkFont(family="Consolas", size=12),
-            fg_color="#0F1115",
+            fg_color="#0C0D0F",
             text_color="#34D399",
-            corner_radius=8
+            corner_radius=6
         )
-        self.txt_sql.pack(fill="x", padx=14, pady=(0, 10))
+        self.txt_sql.pack(fill="x", padx=16, pady=(0, 12))
         self.txt_sql.insert("1.0", "-- Generated MySQL query will appear here...")
         self.txt_sql.configure(state="disabled")
         
@@ -163,7 +179,7 @@ class ChatTab:
         self.output_frame.pack(fill="both", expand=True, padx=16, pady=(4, 12))
         
         # Left Pane: Table
-        self.table_box = ctk.CTkFrame(self.output_frame, fg_color="#18191E", corner_radius=14)
+        self.table_box = ctk.CTkFrame(self.output_frame, fg_color="#121316", corner_radius=12)
         self.table_box.pack(side="left", fill="both", expand=True, padx=(0, 6))
         
         ctk.CTkLabel(
@@ -180,7 +196,7 @@ class ChatTab:
         self.table_placeholder.pack(expand=True)
         
         # Right Pane: Auto-Chart
-        self.chart_box = ctk.CTkFrame(self.output_frame, fg_color="#18191E", corner_radius=14)
+        self.chart_box = ctk.CTkFrame(self.output_frame, fg_color="#121316", corner_radius=12)
         self.chart_box.pack(side="right", fill="both", expand=True, padx=(6, 0))
         
         ctk.CTkLabel(
@@ -243,7 +259,7 @@ class ChatTab:
             
         text_summary = None
         if do_summary:
-            self.parent.after(0, lambda: self.lbl_status.configure(text="Synthesizing Insight...", text_color="#38BDF8"))
+            self.parent.after(0, lambda: self.lbl_status.configure(text="Synthesizing Insight...", text_color="#818CF8"))
             text_summary = ai_chat.summarize_results(question, df)
             
         self.parent.after(0, self._update_ui_with_results, sql, df, text_summary)
@@ -295,19 +311,19 @@ class ChatTab:
         style.theme_use("default")
         style.configure(
             "Treeview",
-            background="#1E2026",
+            background="#16181D",
             foreground="#E2E8F0",
-            fieldbackground="#1E2026",
+            fieldbackground="#16181D",
             rowheight=28,
             font=('Segoe UI', 10)
         )
         style.configure(
             "Treeview.Heading",
-            background="#282D37",
+            background="#22252C",
             foreground="#F8FAFC",
-            font=('Segoe UI', 11, 'bold')
+            font=('Segoe UI', 10, 'bold')
         )
-        style.map("Treeview", background=[("selected", "#3B82F6")])
+        style.map("Treeview", background=[("selected", "#5E6AD2")])
         
         scroll_y = ttk.Scrollbar(self.tree_container, orient="vertical", command=self.tree.yview)
         scroll_x = ttk.Scrollbar(self.tree_container, orient="horizontal", command=self.tree.xview)
