@@ -144,3 +144,18 @@ class TestSQLSafetyAST:
     def test_block_empty_query(self):
         ok, err = validate_sql("   ")
         assert ok is False
+
+    # -------------------------------------------------------------
+    # 4. Locking Read Blocking (Phase A)
+    # -------------------------------------------------------------
+    def test_block_for_update(self):
+        """FOR UPDATE acquires row-level locks — must be blocked to prevent deadlocks."""
+        ok, err = validate_sql("SELECT * FROM sales_data FOR UPDATE")
+        assert ok is False
+        assert "locking" in err.lower()
+
+    def test_block_lock_in_share_mode(self):
+        """LOCK IN SHARE MODE is a shared row lock — also blocked for safety."""
+        ok, err = validate_sql("SELECT * FROM sales_data LOCK IN SHARE MODE")
+        assert ok is False
+        assert "locking" in err.lower()

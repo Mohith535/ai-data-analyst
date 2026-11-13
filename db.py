@@ -163,21 +163,41 @@ def load_dataframe_to_mysql(df, table_name):
             new_columns.append(clean_c)
         clean_df.columns = new_columns
         
-        # 1b. Date sniffing: Detect date-like columns and parse into true DATETIME
+        # 1b. Date sniffing: Detect date-like columns and parse into true DATETIME.
+        # Why: We only want to parse date columns, not random text columns (names, addresses,
+        # error messages). We qualify columns in two ways:
+        #   (a) The column NAME contains a date-related keyword (date, time, created, etc.)
+        #   (b) OR a sample of 5 non-null values MATCHES a common date regex pattern.
+        # This avoids mis-converting columns like "address" or "description".
+        _DATE_NAME_KEYWORDS = ("date", "time", "created", "timestamp", "dt", "year", "month", "day")
+        # Matches ISO dates (2024-01-15) or slash/dot-separated dates (01/15/2024, 15.01.24)
+        _DATE_REGEX = re.compile(
+            r"^\d{4}-\d{2}-\d{2}|^\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}"
+        )
+
+        import warnings
         for col in clean_df.columns:
             if clean_df[col].dtype == 'object':
                 col_lower = str(col).lower()
-                is_date_named = any(k in col_lower for k in ("date", "time", "created", "timestamp", "dt", "year"))
-                non_null = clean_df[col].dropna()
-                if len(non_null) > 0 and (is_date_named or len(non_null) <= 5000):
+                # (a) Name hint check
+                is_date_named = any(k in col_lower for k in _DATE_NAME_KEYWORDS)
+                if not is_date_named:
+                    # (b) Value regex check on a sample of up to 5 non-null values
+                    sample_vals = clean_df[col].dropna().head(5).astype(str)
+                    is_date_named = any(_DATE_REGEX.match(v.strip()) for v in sample_vals)
+
+                if is_date_named:
                     try:
-                        sample = non_null.head(25)
-                        parsed_sample = pd.to_datetime(sample, errors='coerce')
-                        # If >= 75% of non-null sample parses as valid dates (and not plain integers)
-                        if parsed_sample.notna().sum() / len(sample) >= 0.75:
-                            first_val = str(sample.iloc[0]).strip()
-                            if not first_val.isdigit() or len(first_val) == 8:
-                                clean_df[col] = pd.to_datetime(clean_df[col], errors='coerce')
+                        with warnings.catch_warnings():
+                            # Suppress pandas format-inference UserWarning
+                            warnings.filterwarnings(
+                                "ignore", message=".*format.*", category=UserWarning
+                            )
+                            parsed = pd.to_datetime(clean_df[col], errors='coerce', format='mixed')
+                        non_null_orig = clean_df[col].notna().sum()
+                        # Only replace if >= 75% of values parse successfully
+                        if non_null_orig > 0 and parsed.notna().sum() / non_null_orig >= 0.75:
+                            clean_df[col] = parsed
                     except Exception:
                         pass
         

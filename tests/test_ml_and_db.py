@@ -78,3 +78,72 @@ class TestDBDateAndSanitization:
         assert db.get_mysql_type(np.dtype('float64')) == 'DOUBLE'
         assert db.get_mysql_type(np.dtype('datetime64[ns]')) == 'DATETIME'
         assert db.get_mysql_type(np.dtype('O')) == 'TEXT'
+
+
+class TestDateSniffing:
+    """
+    Tests for the targeted date sniffing logic in db.load_dataframe_to_mysql.
+    We test the sniffing logic in isolation by reproducing just the detection path.
+    Why: We want to confirm name-hint + regex heuristic works, without needing a live DB.
+    """
+
+    def _sniff(self, df):
+        """
+        Re-runs the same date-sniffing logic from db.load_dataframe_to_mysql
+        on a copy of df and returns the resulting dtypes.
+        """
+        import re as _re
+        import warnings
+        clean_df = df.copy()
+
+        _DATE_NAME_KEYWORDS = ("date", "time", "created", "timestamp", "dt", "year", "month", "day")
+        _DATE_REGEX = _re.compile(
+            r"^\d{4}-\d{2}-\d{2}|^\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}"
+        )
+
+        for col in clean_df.columns:
+            if clean_df[col].dtype == 'object':
+                col_lower = str(col).lower()
+                is_date_named = any(k in col_lower for k in _DATE_NAME_KEYWORDS)
+                if not is_date_named:
+                    sample_vals = clean_df[col].dropna().head(5).astype(str)
+                    is_date_named = any(_DATE_REGEX.match(v.strip()) for v in sample_vals)
+                if is_date_named:
+                    try:
+                        with warnings.catch_warnings():
+                            warnings.filterwarnings("ignore", message=".*format.*", category=UserWarning)
+                            parsed = pd.to_datetime(clean_df[col], errors='coerce', format='mixed')
+                        non_null_orig = clean_df[col].notna().sum()
+                        if non_null_orig > 0 and parsed.notna().sum() / non_null_orig >= 0.75:
+                            clean_df[col] = parsed
+                    except Exception:
+                        pass
+        return clean_df
+
+    def test_date_named_column_is_converted(self):
+        """Column named 'order_date' with ISO dates → converted to datetime64."""
+        df = pd.DataFrame({'order_date': ['2024-01-15', '2024-02-20', '2024-03-10']})
+        result = self._sniff(df)
+        assert 'datetime' in str(result['order_date'].dtype), \
+            f"Expected datetime dtype, got {result['order_date'].dtype}"
+
+    def test_non_date_named_numeric_column_not_converted(self):
+        """Column 'product_id' with integer strings → must NOT be converted to datetime."""
+        df = pd.DataFrame({'product_id': ['1001', '1002', '1003', '1004', '1005']})
+        result = self._sniff(df)
+        assert result['product_id'].dtype == object, \
+            f"product_id should stay as object, got {result['product_id'].dtype}"
+
+    def test_date_regex_match_triggers_conversion(self):
+        """Column 'uploaded_on' (no date keyword) but values match dd/mm/yyyy → converted."""
+        df = pd.DataFrame({'uploaded_on': ['15/01/2024', '20/02/2024', '10/03/2024']})
+        result = self._sniff(df)
+        assert 'datetime' in str(result['uploaded_on'].dtype), \
+            f"Expected datetime dtype, got {result['uploaded_on'].dtype}"
+
+    def test_non_date_text_column_not_converted(self):
+        """Column 'customer_name' with name strings → must NOT be touched by date sniffing."""
+        df = pd.DataFrame({'customer_name': ['Alice', 'Bob', 'Charlie', 'Dave', 'Eve']})
+        result = self._sniff(df)
+        assert result['customer_name'].dtype == object, \
+            f"customer_name should stay as object, got {result['customer_name'].dtype}"

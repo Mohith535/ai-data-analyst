@@ -7,7 +7,7 @@
 [![Groq](https://img.shields.io/badge/Inference-Groq%20Cloud%20LPU-F55036?style=for-the-badge)](https://groq.com)
 [![Plotly](https://img.shields.io/badge/3D%20Graphics-Plotly-3F4F75?style=for-the-badge&logo=plotly&logoColor=white)](https://plotly.com)
 
-A high-performance, Linear/Raycast-inspired dark desktop analytics platform built with Python. Ingest datasets, automatically audit hygiene & statistical outliers, persist to production MySQL with column sanitization, render high-contrast Matplotlib & interactive Plotly 3D visualisations, fit explainable Scikit-Learn Machine Learning models, and converse with an autonomous AI Analyst & Teacher powered by Groq's high-speed inference engine.
+A Linear/Raycast-inspired dark desktop analytics platform built with Python. Ingest datasets, automatically audit hygiene & statistical outliers, persist to a local MySQL database with column sanitization, render Matplotlib & interactive Plotly 3D visualisations, fit explainable Scikit-Learn Machine Learning models, and converse with an AI Analyst powered by Groq's fast inference engine.
 
 ---
 
@@ -49,7 +49,7 @@ The automated setup wizard will:
 
 ## 🔑 How to Get Your Free Groq API Key
 
-The natural language AI features are powered by Groq's low-latency LPU Cloud (OpenAI GPT-OSS 120B & Qwen 27B):
+The natural language AI features are powered by Groq's low-latency LPU Cloud (OpenAI GPT-OSS 120B & Qwen 3.8 27B):
 
 1. Go to [https://console.groq.com/keys](https://console.groq.com/keys)
 2. Sign in with Google or GitHub (free, no credit card required)
@@ -84,10 +84,11 @@ The application is structured into 6 specialized tabs accessible via the collaps
   - **DDL/DML Ban:** Structurally blocks `INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`, `CREATE`, and `TRUNCATE`.
   - **Anti-Exfiltration:** Blocks file output clauses (`INTO OUTFILE` and `INTO DUMPFILE`).
   - **Anti-DoS:** Rejects server-freezing functions (`SLEEP()`, `BENCHMARK()`, `LOAD_FILE()`).
+  - **Anti-Lock:** Rejects locking reads (`FOR UPDATE`, `LOCK IN SHARE MODE`) that could cause deadlocks.
   - **Automatic Row Capping:** Automatically injects or caps queries to `LIMIT 1000`.
 - **Database Session Defense-in-Depth:** All analytical queries run with `SET SESSION TRANSACTION READ ONLY` and a 5,000ms execution timeout (`max_execution_time`).
 - **Self-Healing SQL Fallback:** If the LLM generates conversational text or non-SELECT output on broad prompts, the system automatically catches it and falls back to a clean overview query (`SELECT * FROM table LIMIT 25`) with a clear user notification banner.
-- **Threaded Execution:** All AI inference and database operations run in daemon background threads (`threading.Thread`) to keep the CustomTkinter GUI responsive at 60 FPS.
+- **Threaded Execution:** All AI inference and database operations run in daemon background threads (`threading.Thread`) to keep the CustomTkinter GUI responsive during long-running operations.
 
 ---
 

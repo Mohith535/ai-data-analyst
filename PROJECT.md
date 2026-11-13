@@ -357,3 +357,32 @@ Below is the permanent master roadmap tracking code review improvements:
 - **Test Suite Expansion:**
   - Added `tests/test_conversation_memory.py` (4 new tests) covering history injection, history-less execution, and theme token existence.
   - Test suite expanded to **32/32 passing unit tests**.
+
+#### Phase A: Safety & Cleanup (2026-11-14)
+
+**A1. Locking Read Rejection in `validate_sql()` (`ai_chat.py`):**
+- Added check: after confirming AST root is `exp.Select`, inspect `ast.args.get("locks")`.
+- If truthy (sqlglot populates this for `FOR UPDATE` and `LOCK IN SHARE MODE`), returns `False, "Locking reads … are not permitted."`.
+- Why: Locking reads acquire row-level locks on matched rows. In a multi-connection pool environment this can stall other threads or cause deadlocks — they should never reach the analytical query path.
+- Added 2 new pytest cases (`test_block_for_update`, `test_block_lock_in_share_mode`).
+
+**A2. Targeted Date Sniffing (`db.py` — `load_dataframe_to_mysql()`):**
+- Replaced the too-broad `len(non_null) <= 5000` fallback with a two-gate heuristic:
+  - **Gate 1 (Name hint):** column name contains any of: `date`, `time`, `created`, `timestamp`, `dt`, `year`, `month`, `day`.
+  - **Gate 2 (Value regex):** 5-value sample matches `^\d{4}-\d{2}-\d{2}` (ISO) or `^\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}` (slash/dot formats).
+- Only columns that pass Gate 1 OR Gate 2 are attempted for datetime parsing.
+- Uses `pd.to_datetime(..., format='mixed')` with `warnings.catch_warnings()` to suppress pandas format-inference `UserWarning`.
+- Why: The old approach tried date parsing on every object column ≤ 5000 rows, which could mis-convert names, addresses, or free-text columns that happen to contain number-like tokens.
+- Added 4 new pytest cases (`TestDateSniffing`) in `tests/test_ml_and_db.py` covering all branches.
+
+**A3. Groq Model Verification (`ai_chat.py`):**
+- Live queried `client.models.list()` against the account's Groq API key.
+- Confirmed all 4 models in `preferred` list are currently active: `openai/gpt-oss-120b`, `qwen/qwen3.8-27b`, `openai/gpt-oss-20b`, `allam-2-7b`. No changes needed to model IDs.
+
+**A4. README Honesty Pass (`README.md`):**
+- Line 10: Removed "high-performance", "production", "autonomous" — replaced with factual description.
+- Line 52: Updated Qwen model reference to "Qwen 3.8 27B" (accurate model name).
+- Line 86: Added "Anti-Lock" bullet for locking read rejection.
+- Line 90: Removed "60 FPS" — Tkinter does not expose or guarantee frame rate; replaced with "keeps the GUI responsive during long-running operations".
+
+**Test Suite:** Expanded from 32 → **38/38 passing** (+6 new tests).

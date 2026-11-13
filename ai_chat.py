@@ -128,6 +128,12 @@ def validate_sql(query):
     # 2. Must be a Select or Union expression (CTE 'WITH ... SELECT' is represented as Select in sqlglot)
     if not isinstance(ast, (exp.Select, exp.Union)):
         return False, "Only read-only SELECT queries are permitted."
+
+    # 2b. Block locking reads: FOR UPDATE / LOCK IN SHARE MODE
+    # Why: These clauses acquire row-level locks and can cause deadlocks or stall
+    # other connections. sqlglot represents them in ast.args["locks"] for Select nodes.
+    if isinstance(ast, exp.Select) and ast.args.get("locks"):
+        return False, "Locking reads (FOR UPDATE / LOCK IN SHARE MODE) are not permitted."
         
     # 3. Check for any forbidden DDL / DML nodes inside the AST
     forbidden_types = (
