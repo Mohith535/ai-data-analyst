@@ -13,6 +13,7 @@ Architecture:
 """
 
 import customtkinter as ctk
+from PIL import Image
 import os
 import matplotlib.pyplot as plt
 import db
@@ -26,6 +27,21 @@ from ui.ml_tab import MLTab
 from ui.chat_tab import ChatTab
 from ui.interactive_tab import InteractiveTab
 from ui.settings_tab import SettingsTab
+
+
+def _load_nav_icon(name, size=18):
+    """
+    Load a PNG icon from assets/icons/ as a CTkImage (HiDPI-safe).
+    Falls back to None gracefully if the file is missing.
+    Why: CTkImage scales correctly on Retina/HiDPI displays; raw
+    PhotoImage would appear blurry on 2x screens.
+    """
+    path = os.path.join(os.path.dirname(__file__), "..", "assets", "icons", f"{name}.png")
+    try:
+        pil_img = Image.open(os.path.abspath(path)).resize((size, size), Image.LANCZOS)
+        return ctk.CTkImage(light_image=pil_img, dark_image=pil_img, size=(size, size))
+    except Exception:
+        return None
 
 
 class App(ctk.CTk):
@@ -82,6 +98,13 @@ class App(ctk.CTk):
         self.refresh_sidebar_history()
         self.check_groq_status()
         
+        # --- Global Keyboard Shortcuts ---
+        # Why: Ctrl+1..6 let power users navigate without touching the mouse.
+        # We bind at the root window level so shortcuts work from any focused widget.
+        tab_keys = ["chat", "upload", "charts", "interactive", "ml", "settings"]
+        for i, k in enumerate(tab_keys, start=1):
+            self.bind(f"<Control-{i}>", lambda e, key=k: self.switch_tab(key))
+        
     def _build_sidebar(self):
         top_bar = ctk.CTkFrame(self.sidebar_frame, fg_color="transparent", height=54)
         top_bar.pack(fill="x", padx=10, pady=(12, 6))
@@ -112,19 +135,25 @@ class App(ctk.CTk):
         self.nav_container = ctk.CTkFrame(self.sidebar_frame, fg_color="transparent")
         self.nav_container.pack(fill="x", padx=10, pady=4)
         
+        # Nav items: (tab_key, icon_filename, emoji_fallback, label, shortcut_hint)
         nav_items = [
-            ("chat", "💬", "AI Analyst Chat"),
-            ("upload", "📂", "Upload Dataset"),
-            ("charts", "📊", "Visual Studio"),
-            ("interactive", "🌐", "Interactive Studio"),
-            ("ml", "🤖", "ML Workbench"),
-            ("settings", "⚙️", "Settings & Prefs")
+            ("chat",        "chat",        "💬", "AI Analyst Chat",   "⌃1"),
+            ("upload",      "upload",      "📂", "Upload Dataset",    "⌃2"),
+            ("charts",      "charts",      "📊", "Visual Studio",     "⌃3"),
+            ("interactive", "interactive", "🌐", "Interactive Studio","⌃4"),
+            ("ml",          "ml",          "🤖", "ML Workbench",      "⌃5"),
+            ("settings",    "settings",    "⚙️", "Settings & Prefs",  "⌃6"),
         ]
         
-        for key, icon, title in nav_items:
+        for key, icon_name, emoji, title, hint in nav_items:
+            ctk_icon = _load_nav_icon(icon_name, size=16)
+            # Build button text: use emoji as text prefix when image loaded (image replaces it visually)
+            btn_text = f"  {title}" if ctk_icon else f"  {emoji}  {title}"
             btn = ctk.CTkButton(
                 self.nav_container,
-                text=f"  {icon}  {title}",
+                text=btn_text,
+                image=ctk_icon,
+                compound="left",          # icon left of text
                 font=ctk.CTkFont(family="Segoe UI", size=12, weight="normal"),
                 anchor="w",
                 height=38,
@@ -135,7 +164,7 @@ class App(ctk.CTk):
                 command=lambda k=key: self.switch_tab(k)
             )
             btn.pack(fill="x", pady=2)
-            self.nav_buttons[key] = (btn, icon, title)
+            self.nav_buttons[key] = (btn, ctk_icon, emoji, title)
             
         self.history_header_frame = ctk.CTkFrame(self.sidebar_frame, fg_color="transparent")
         self.history_header_frame.pack(fill="x", padx=12, pady=(14, 2))
@@ -222,7 +251,7 @@ class App(ctk.CTk):
             frame.pack_forget()
         self.tab_frames[tab_key].pack(fill="both", expand=True)
         
-        for key, (btn, icon, title) in self.nav_buttons.items():
+        for key, (btn, ctk_icon, emoji, title) in self.nav_buttons.items():
             if key == tab_key:
                 btn.configure(
                     fg_color="#5E6AD2",
