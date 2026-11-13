@@ -18,6 +18,85 @@ import data_quality
 from ui.async_helper import run_async
 
 
+class TableConflictModal(ctk.CTkToplevel):
+    """
+    Non-destructive modal dialog to resolve table collision in MySQL.
+    Gives the user explicit control: Overwrite vs Rename vs Cancel.
+    """
+    def __init__(self, parent, base_name, next_name, row_count, col_count):
+        super().__init__(parent)
+        self.title("Table Conflict Detected")
+        self.geometry("450x260")
+        self.resizable(False, False)
+        self.configure(fg_color="#18191E")
+        self.result = "cancel"
+
+        self.transient(parent)
+        self.grab_set()
+
+        lbl_head = ctk.CTkLabel(
+            self,
+            text=f"⚠️  Table `{base_name}` Already Exists",
+            font=ctk.CTkFont(family="Segoe UI", size=15, weight="bold"),
+            text_color="#F59E0B"
+        )
+        lbl_head.pack(padx=20, pady=(18, 6), anchor="w")
+
+        lbl_msg = ctk.CTkLabel(
+            self,
+            text=(
+                f"A table named `{base_name}` already exists in your MySQL database.\n\n"
+                f"Incoming Dataset: {row_count:,} rows, {col_count} columns.\n"
+                f"Choose how you want to handle this upload:"
+            ),
+            font=ctk.CTkFont(family="Segoe UI", size=12),
+            text_color="#CBD5E1",
+            justify="left"
+        )
+        lbl_msg.pack(padx=20, pady=(0, 14), anchor="w")
+
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=20, pady=(4, 16))
+
+        def choose(val):
+            self.result = val
+            self.destroy()
+
+        btn_replace = ctk.CTkButton(
+            btn_frame,
+            text=f"🔄 Overwrite Existing Table (`{base_name}`)",
+            command=lambda: choose("replace"),
+            fg_color="#EF4444",
+            hover_color="#DC2626",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            height=34
+        )
+        btn_replace.pack(fill="x", pady=4)
+
+        btn_rename = ctk.CTkButton(
+            btn_frame,
+            text=f"📋 Save as New Table (`{next_name}`)",
+            command=lambda: choose("rename"),
+            fg_color="#3B82F6",
+            hover_color="#2563EB",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            height=34
+        )
+        btn_rename.pack(fill="x", pady=4)
+
+        btn_cancel = ctk.CTkButton(
+            btn_frame,
+            text="Cancel",
+            command=lambda: choose("cancel"),
+            fg_color="#2D3139",
+            hover_color="#374151",
+            text_color="#94A3B8",
+            font=ctk.CTkFont(size=11),
+            height=28
+        )
+        btn_cancel.pack(fill="x", pady=(4, 0))
+
+
 class UploadTab:
     """Manages the Upload & Data Quality tab of the application."""
     
@@ -238,85 +317,6 @@ class UploadTab:
         for _, row in display_df.iterrows():
             values = [str(v) if pd.notna(v) else "" for v in row]
             self.tree.insert("", "end", values=values)
-            
-class TableConflictModal(ctk.CTkToplevel):
-    """
-    Non-destructive modal dialog to resolve table collision in MySQL.
-    Gives the user explicit control: Overwrite vs Rename vs Cancel.
-    """
-    def __init__(self, parent, base_name, next_name, row_count, col_count):
-        super().__init__(parent)
-        self.title("Table Conflict Detected")
-        self.geometry("450x260")
-        self.resizable(False, False)
-        self.configure(fg_color="#18191E")
-        self.result = "cancel"
-
-        self.transient(parent)
-        self.grab_set()
-
-        lbl_head = ctk.CTkLabel(
-            self,
-            text=f"⚠️  Table `{base_name}` Already Exists",
-            font=ctk.CTkFont(family="Segoe UI", size=15, weight="bold"),
-            text_color="#F59E0B"
-        )
-        lbl_head.pack(padx=20, pady=(18, 6), anchor="w")
-
-        lbl_msg = ctk.CTkLabel(
-            self,
-            text=(
-                f"A table named `{base_name}` already exists in your MySQL database.\n\n"
-                f"Incoming Dataset: {row_count:,} rows, {col_count} columns.\n"
-                f"Choose how you want to handle this upload:"
-            ),
-            font=ctk.CTkFont(family="Segoe UI", size=12),
-            text_color="#CBD5E1",
-            justify="left"
-        )
-        lbl_msg.pack(padx=20, pady=(0, 14), anchor="w")
-
-        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
-        btn_frame.pack(fill="x", padx=20, pady=(4, 16))
-
-        def choose(val):
-            self.result = val
-            self.destroy()
-
-        btn_replace = ctk.CTkButton(
-            btn_frame,
-            text=f"🔄 Overwrite Existing Table (`{base_name}`)",
-            command=lambda: choose("replace"),
-            fg_color="#EF4444",
-            hover_color="#DC2626",
-            font=ctk.CTkFont(size=12, weight="bold"),
-            height=34
-        )
-        btn_replace.pack(fill="x", pady=4)
-
-        btn_rename = ctk.CTkButton(
-            btn_frame,
-            text=f"📋 Save as New Table (`{next_name}`)",
-            command=lambda: choose("rename"),
-            fg_color="#3B82F6",
-            hover_color="#2563EB",
-            font=ctk.CTkFont(size=12, weight="bold"),
-            height=34
-        )
-        btn_rename.pack(fill="x", pady=4)
-
-        btn_cancel = ctk.CTkButton(
-            btn_frame,
-            text="Cancel",
-            command=lambda: choose("cancel"),
-            fg_color="#2D3139",
-            hover_color="#374151",
-            text_color="#94A3B8",
-            font=ctk.CTkFont(size=11),
-            height=28
-        )
-        btn_cancel.pack(fill="x", pady=(4, 0))
-
 
     def save_to_mysql(self):
         if self.current_df is None:
