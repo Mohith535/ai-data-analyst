@@ -15,6 +15,7 @@ import pandas as pd
 import os
 import db
 import data_quality
+from ui.async_helper import run_async
 
 
 class UploadTab:
@@ -121,8 +122,15 @@ class UploadTab:
         if not filepath:
             return
             
-        try:
-            # Handle potential encoding issues & varied delimiters (UTF-8, Latin-1 fallback)
+        filename = os.path.basename(filepath)
+        self.btn_select.configure(state="disabled")
+        self.lbl_status.configure(
+            text=f"⏳ Loading and auditing {filename}...",
+            text_color="#60A5FA"
+        )
+        self.lbl_audit_stats.configure(text="Profiling dataset hygiene & outliers in background...")
+        
+        def worker():
             try:
                 df = pd.read_csv(filepath)
             except UnicodeDecodeError:
@@ -132,24 +140,24 @@ class UploadTab:
                     df = pd.read_csv(filepath, sep=None, engine='python')
                 except Exception:
                     df = pd.read_csv(filepath, encoding='latin-1', sep=None, engine='python')
-                
+                    
             if df.empty:
-                messagebox.showwarning("Empty File", "This CSV file contains 0 rows.")
-                return
+                raise ValueError("This CSV file contains 0 rows.")
             if len(df.columns) < 1:
-                messagebox.showwarning("Notice", "Dataset has 0 columns.")
-                return
+                raise ValueError("Dataset has 0 columns.")
                 
+            audit = data_quality.profile_dataset(df)
+            return df, filename, audit
+
+        def on_success(result):
+            df, filename, audit = result
             self.current_df = df
-            self.current_filename = os.path.basename(filepath)
-            
+            self.current_filename = filename
+            self.btn_select.configure(state="normal")
             self.lbl_status.configure(
                 text=f"Loaded: {self.current_filename}",
                 text_color="#34D399"
             )
-            
-            # Run Automated Data Quality Audit
-            audit = data_quality.profile_dataset(df)
             if audit:
                 total_outliers = sum(c["outliers"] for c in audit["columns"])
                 audit_str = (
@@ -159,12 +167,16 @@ class UploadTab:
                     f"IQR Outliers: {total_outliers}"
                 )
                 self.lbl_audit_stats.configure(text=audit_str)
-                
             self.btn_save.configure(state="normal")
             self._display_dataframe(df)
-            
-        except Exception as e:
-            messagebox.showerror("File Error", f"Failed to load file:\n{e}")
+
+        def on_error(exc):
+            self.btn_select.configure(state="normal")
+            self.lbl_status.configure(text="Failed to load dataset", text_color="#EF4444")
+            self.lbl_audit_stats.configure(text="Completeness: --  |  Missing Values: --  |  Duplicates: --")
+            messagebox.showerror("File Error", f"Failed to load file:\n{exc}")
+
+        run_async(worker, on_success=on_success, on_error=on_error, widget=self.parent)
             
     def _display_dataframe(self, df, max_rows=500):
         # Hide placeholder
@@ -243,13 +255,24 @@ class UploadTab:
             return
             
         self.btn_save.configure(state="disabled", text="⏳ Ingesting...")
-        self.parent.update()
+        self.lbl_status.configure(text=f"⏳ Ingesting {len(self.current_df):,} rows into `{table_name}`...", text_color="#60A5FA")
         
-        success, message = db.load_dataframe_to_mysql(self.current_df, table_name)
-        self.btn_save.configure(state="normal", text="💾  Save to MySQL")
-        
-        if success:
-            messagebox.showinfo("Success", message)
-            self.lbl_status.configure(text=f"Ingested into table `{table_name}`", text_color="#34D399")
-        else:
-            messagebox.showerror("Database Error", message)
+        def worker():
+            return db.load_dataframe_to_mysql(self.current_df, table_name)
+
+        def on_success(result):
+            success, message = result
+            self.btn_save.configure(state="normal", text="💾  Save to MySQL")
+            if success:
+                messagebox.showinfo("Success", message)
+                self.lbl_status.configure(text=f"Ingested into table `{table_name}`", text_color="#34D399")
+            else:
+                messagebox.showerror("Database Error", message)
+                self.lbl_status.configure(text="Ingestion failed", text_color="#EF4444")
+
+        def on_error(exc):
+            self.btn_save.configure(state="normal", text="💾  Save to MySQL")
+            self.lbl_status.configure(text="Database connection error", text_color="#EF4444")
+            messagebox.showerror("Database Error", f"Failed to ingest data:\n{exc}")
+
+        run_async(worker, on_success=on_success, on_error=on_error, widget=self.parent)

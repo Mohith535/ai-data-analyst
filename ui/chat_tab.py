@@ -13,6 +13,7 @@ from tkinter import messagebox, filedialog
 import tkinter.ttk as ttk
 import matplotlib
 matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 import db
@@ -415,6 +416,11 @@ class ChatTab:
             self.tree.insert("", "end", values=vals)
             
     def _display_chart(self, df):
+        # Prevent memory leaks: close previous figure before rendering new auto-chart
+        if self.current_fig is not None:
+            plt.close(self.current_fig)
+            self.current_fig = None
+            
         if self.current_canvas is not None:
             self.current_canvas.get_tk_widget().destroy()
             self.current_canvas = None

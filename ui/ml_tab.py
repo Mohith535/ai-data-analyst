@@ -7,9 +7,11 @@ import customtkinter as ctk
 from tkinter import messagebox
 import matplotlib
 matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import db
 import ml
+from ui.async_helper import run_async
 
 
 class MLTab:
@@ -18,6 +20,7 @@ class MLTab:
     def __init__(self, parent):
         self.parent = parent
         self.current_canvas = None
+        self.current_fig = None
         
         # --- Top Controls Card ---
         self.controls_frame = ctk.CTkFrame(parent, fg_color="#18191E", corner_radius=12)
@@ -150,40 +153,58 @@ class MLTab:
         if table in ("Select a table", "No tables found") or f == "—" or t == "—":
             messagebox.showwarning("Notice", "Select table and numerical features.")
             return
+
+        if model_type != "Linear Regression":
+            try:
+                k = int(self.clusters_var.get().strip())
+                if k < 2 or k > 20:
+                    raise ValueError("Cluster count K must be an integer between 2 and 20.")
+            except ValueError as ve:
+                messagebox.showwarning("Invalid Cluster Parameter", f"Please enter a valid number of clusters (2-20):\n{ve}")
+                return
+        else:
+            k = 3
             
         sql = f"SELECT `{f}`, `{t}` FROM `{table}` LIMIT 10000"
-        df, err = db.run_query(sql)
-        if err or df is None or df.empty:
-            messagebox.showerror("Data Error", err or "No rows found.")
-            return
-            
-        try:
-            self.btn_run.configure(state="disabled", text="⏳ Fitting...")
-            self.parent.update()
-            
+        
+        self.btn_run.configure(state="disabled", text="⏳ Fitting...")
+        self.lbl_results.configure(text="⏳ Fitting model and calculating metrics in background...", text_color="#60A5FA")
+        
+        def worker():
+            df, err = db.run_query(sql)
+            if err:
+                raise ValueError(err)
+            if df is None or df.empty:
+                raise ValueError("No rows found in table.")
+                
             if model_type == "Linear Regression":
                 res = ml.run_linear_regression(df, f, t)
                 txt = f"📐 R² Score: {res['r2']:.4f}  |  MAE: {res['mae']:.2f}  |  Equation: {res['equation']}"
-                self.lbl_results.configure(text=txt)
-                self._embed_chart(res['figure'])
+                return res['figure'], txt
             else:
-                try:
-                    k = int(self.clusters_var.get().strip())
-                    if k < 2 or k > 20:
-                        raise ValueError("Cluster count K must be an integer between 2 and 20.")
-                except ValueError as ve:
-                    messagebox.showwarning("Invalid Cluster Parameter", f"Please enter a valid number of clusters (2-20):\n{ve}")
-                    return
                 res = ml.run_kmeans(df, f, t, n_clusters=k)
                 txt = f"📊 K: {res['n_clusters']}  |  Inertia: {res['inertia']:.2f}  |  Counts: {res['cluster_sizes']}"
-                self.lbl_results.configure(text=txt)
-                self._embed_chart(res['figure'])
-        except Exception as e:
-            messagebox.showerror("Model Error", str(e))
-        finally:
+                return res['figure'], txt
+
+        def on_success(result):
+            fig, txt = result
             self.btn_run.configure(state="normal", text="🚀 Train & Fit")
+            self.lbl_results.configure(text=txt, text_color="#10B981")
+            self._embed_chart(fig)
+
+        def on_error(exc):
+            self.btn_run.configure(state="normal", text="🚀 Train & Fit")
+            self.lbl_results.configure(text=f"Model fitting failed: {exc}", text_color="#EF4444")
+            messagebox.showerror("Model Error", str(exc))
+
+        run_async(worker, on_success=on_success, on_error=on_error, widget=self.parent)
             
     def _embed_chart(self, fig):
+        # Prevent memory leaks: close previously rendered figure
+        if self.current_fig is not None:
+            plt.close(self.current_fig)
+        self.current_fig = fig
+        
         if self.current_canvas is not None:
             self.current_canvas.get_tk_widget().destroy()
             self.current_canvas = None

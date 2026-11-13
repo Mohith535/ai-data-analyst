@@ -13,6 +13,7 @@ from tkinter import messagebox
 import settings_manager
 import history_manager
 import ai_chat
+from ui.async_helper import run_async
 
 
 class SettingsTab:
@@ -162,24 +163,33 @@ class SettingsTab:
 
     def _test_groq_connection(self):
         self.btn_test_api.configure(state="disabled", text="⏳ Testing...")
-        self.parent.update()
-        try:
+        
+        def worker():
             client = ai_chat.get_groq_client()
-            model = ai_chat.get_available_model(client)
+            return ai_chat.get_available_model(client, force_refresh=True)
+
+        def on_success(model):
+            self.btn_test_api.configure(state="normal", text="⚡ Test API Connection")
+            if self.on_settings_changed:
+                self.on_settings_changed()
             messagebox.showinfo(
                 "Groq API Connected",
                 f"Successfully connected to Groq LPU Cloud!\n\n"
                 f"Active Model: {model}\n"
                 f"Status: Operational (Ready for Text-to-SQL & Insights)"
             )
-        except Exception as e:
+
+        def on_error(exc):
+            self.btn_test_api.configure(state="normal", text="⚡ Test API Connection")
+            if self.on_settings_changed:
+                self.on_settings_changed()
             messagebox.showerror(
                 "Groq Connection Error",
-                f"Could not connect to Groq API:\n\n{e}\n\n"
+                f"Could not connect to Groq API:\n\n{exc}\n\n"
                 "Please verify your GROQ_API_KEY in .env or run setup.bat."
             )
-        finally:
-            self.btn_test_api.configure(state="normal", text="⚡ Test API Connection")
+
+        run_async(worker, on_success=on_success, on_error=on_error, widget=self.parent)
         
     def _save_toggles(self):
         settings_manager.set_setting("ai_teacher_mode", self.sw_teacher_var.get())

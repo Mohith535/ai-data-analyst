@@ -294,3 +294,23 @@ Below is the permanent master roadmap tracking code review improvements:
 4. **Phase 4:** DB Enhancements (Date parsing into DATETIME, Table overwrite confirmation, Connection Pool) & Multi-Feature Regression
 5. **Phase 5:** Chat Conversation Memory (last 3 Q&A) & UI Polish (Linear theme tokens, Toasts, Scrolling Card Stream)
 6. **Phase 6:** Full Test Suite, MIT License, GitHub Topics, and 10 Viva Voce Q&As
+
+---
+
+### 🚀 Phase 2 & Phase 3 Engineering Log (2026-11-13)
+
+#### Phase 2: Privacy Toggle, Caching & Requirements Pinned
+- **Strict Privacy Mode:** Added `send_data_sample` toggle in `settings_manager.py` and `ui/settings_tab.py` (Default: OFF). When OFF, Groq receives only aggregate metrics (`Min`, `Mean`, `Max`, `Count`); zero raw rows leave local MySQL.
+- **Model Discovery Caching:** Added `_CACHED_AVAILABLE_MODEL` in `ai_chat.py` to prevent redundant network calls to `client.models.list()`.
+- **Requirements Cleaned:** Pinned tested versions in `requirements.txt` (`customtkinter==6.0.0`, `sqlglot==30.31.0`, `pytest==9.2.0`, etc.) and purged unused `reportlab`.
+- **Honest README:** Updated documentation to reflect dual-mode privacy, WebGL Plotly rendering, and real AST SQL validation.
+
+#### Phase 3: Universal Async Threading, Memory Leak Fix & Live Badge
+- **Shared Async Helper (`ui/async_helper.py`):** Implemented `run_async()` daemon worker that dispatches callbacks onto the main GUI thread via `widget.after(0, ...)`.
+- **100% Async Tabs:**
+  - `ui/upload_tab.py`: Reading large CSVs, dataset hygiene profiling, and batch MySQL insertion now run in background threads.
+  - `ui/charts_tab.py`: Query execution and Matplotlib figure generation run in background threads with button loading state (`⏳ Rendering...`).
+  - `ui/ml_tab.py`: Training Linear Regression and KMeans clustering runs in background threads with button loading state (`⏳ Fitting...`).
+  - `ui/interactive_tab.py`: Plotly HTML generation runs in background threads with button loading state (`⏳ Launching Canvas...`).
+- **Eliminated Matplotlib Memory Leaks:** Explicitly invoked `plt.close(self.current_fig)` before rendering new plots in `charts_tab.py`, `ml_tab.py`, and `chat_tab.py`. Registered `plt.close('all')` on window exit (`WM_DELETE_WINDOW`).
+- **Dynamic Groq Status Badge:** Replaced hardcoded string with dynamic live badge in sidebar (`Connected` in green, `No API Key` in amber, `Offline` in red) automatically evaluated at startup and updated live after the Settings connection test.

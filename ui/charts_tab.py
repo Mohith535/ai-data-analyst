@@ -8,9 +8,11 @@ import customtkinter as ctk
 from tkinter import messagebox
 import matplotlib
 matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import db
 import charts
+from ui.async_helper import run_async
 
 
 class ChartsTab:
@@ -19,6 +21,7 @@ class ChartsTab:
     def __init__(self, parent):
         self.parent = parent
         self.current_canvas = None
+        self.current_fig = None
         
         # --- Top Controls Card ---
         self.controls_frame = ctk.CTkFrame(parent, fg_color="#18191E", corner_radius=12)
@@ -114,25 +117,43 @@ class ChartsTab:
             return
             
         sql = f"SELECT `{y_col}` FROM `{table}` LIMIT 5000" if chart_type == "Histogram" else f"SELECT `{x_col}`, `{y_col}` FROM `{table}` LIMIT 5000"
-        df, error = db.run_query(sql)
-        if error or df is None or df.empty:
-            messagebox.showerror("Query Error", error or "Query returned 0 rows.")
-            return
-            
-        try:
+        
+        self.btn_generate.configure(state="disabled", text="⏳ Rendering...")
+        
+        def worker():
+            df, error = db.run_query(sql)
+            if error:
+                raise ValueError(error)
+            if df is None or df.empty:
+                raise ValueError("Query returned 0 rows.")
+                
             if chart_type == "Bar":
-                fig = charts.create_bar_chart(df, x_col, y_col)
+                return charts.create_bar_chart(df, x_col, y_col)
             elif chart_type == "Line":
-                fig = charts.create_line_chart(df, x_col, y_col)
+                return charts.create_line_chart(df, x_col, y_col)
             elif chart_type == "Pie":
-                fig = charts.create_pie_chart(df, x_col, y_col)
+                return charts.create_pie_chart(df, x_col, y_col)
             elif chart_type == "Histogram":
-                fig = charts.create_histogram(df, y_col)
+                return charts.create_histogram(df, y_col)
+            else:
+                raise ValueError(f"Unknown chart type: {chart_type}")
+
+        def on_success(fig):
+            self.btn_generate.configure(state="normal", text="📊 Render Chart")
             self._embed_chart(fig)
-        except Exception as e:
-            messagebox.showerror("Render Error", f"Failed to generate chart:\n{e}")
+
+        def on_error(exc):
+            self.btn_generate.configure(state="normal", text="📊 Render Chart")
+            messagebox.showerror("Render Error", f"Failed to generate chart:\n{exc}")
+
+        run_async(worker, on_success=on_success, on_error=on_error, widget=self.parent)
             
     def _embed_chart(self, fig):
+        # Prevent memory leaks: explicitly close previously active figure
+        if self.current_fig is not None:
+            plt.close(self.current_fig)
+        self.current_fig = fig
+        
         if self.current_canvas is not None:
             self.current_canvas.get_tk_widget().destroy()
             self.current_canvas = None

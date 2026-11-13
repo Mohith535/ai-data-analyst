@@ -9,6 +9,7 @@ import customtkinter as ctk
 from tkinter import messagebox
 import db
 import interactive_studio
+from ui.async_helper import run_async
 
 
 class InteractiveTab:
@@ -152,24 +153,35 @@ class InteractiveTab:
             messagebox.showwarning("Notice", "Select a valid table first.")
             return
             
-        df, err = db.run_query(f"SELECT * FROM `{table}` LIMIT 2000")
-        if err or df is None or df.empty:
-            messagebox.showerror("Error", err or "Dataset contains no records.")
-            return
-            
         chart_type = self.type_var.get()
         x = self.x_var.get()
         y = self.y_var.get()
         z = self.z_var.get() if chart_type == "Scatter 3D" else None
         
-        try:
-            html_path = interactive_studio.generate_interactive_chart(
+        self.btn_launch.configure(state="disabled", text="⏳ Launching Canvas...")
+        self.lbl_preview.configure(text="⏳ Querying database and compiling 3D/Zoomable Plotly visualization in background...", text_color="#60A5FA")
+        
+        def worker():
+            df, err = db.run_query(f"SELECT * FROM `{table}` LIMIT 2000")
+            if err:
+                raise ValueError(err)
+            if df is None or df.empty:
+                raise ValueError("Dataset contains no records.")
+            return interactive_studio.generate_interactive_chart(
                 df, chart_type, x, y, z_col=z
             )
+
+        def on_success(html_path):
+            self.btn_launch.configure(state="normal", text="🚀 Launch Interactive Canvas")
             self.lbl_preview.configure(
-                text=f"✅ Interactive Canvas Launched!\n\nFile saved to: {html_path}\n"
+                text=f"✅ Interactive Canvas Launched!\n\nFile: {html_path}\n"
                      f"Rotatable 3D / Pan / Zoom controls are now active in your browser.",
                 text_color="#34D399"
             )
-        except Exception as e:
-            messagebox.showerror("Studio Error", str(e))
+
+        def on_error(exc):
+            self.btn_launch.configure(state="normal", text="🚀 Launch Interactive Canvas")
+            self.lbl_preview.configure(text=f"Studio Error: {exc}", text_color="#EF4444")
+            messagebox.showerror("Studio Error", str(exc))
+
+        run_async(worker, on_success=on_success, on_error=on_error, widget=self.parent)

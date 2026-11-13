@@ -13,10 +13,13 @@ Architecture:
 """
 
 import customtkinter as ctk
+import os
+import matplotlib.pyplot as plt
 import db
 import ai_chat
 import history_manager
 import settings_manager
+from ui.async_helper import run_async
 from ui.upload_tab import UploadTab
 from ui.charts_tab import ChartsTab
 from ui.ml_tab import MLTab
@@ -44,6 +47,10 @@ class App(ctk.CTk):
         self.sidebar_expanded = True
         self.active_tab_name = "chat"
         self.nav_buttons = {}
+        self.engine_status = ("⚡ Checking Groq...", "#60A5FA", "#161B22")
+        
+        # Cleanly close all Matplotlib figures on exit
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
         
         # --- Root Layout ---
         self.root_container = ctk.CTkFrame(self, fg_color="transparent")
@@ -73,6 +80,7 @@ class App(ctk.CTk):
         self.chat_tab.on_query_success = self.refresh_sidebar_history
         self.switch_tab("chat")
         self.refresh_sidebar_history()
+        self.check_groq_status()
         
     def _build_sidebar(self):
         top_bar = ctk.CTkFrame(self.sidebar_frame, fg_color="transparent", height=54)
@@ -152,10 +160,10 @@ class App(ctk.CTk):
         
         self.lbl_engine_badge = ctk.CTkLabel(
             self.bottom_sidebar,
-            text="⚡ Groq 120B Connected",
+            text=self.engine_status[0],
             font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-            fg_color="#161B22",
-            text_color="#60A5FA",
+            fg_color=self.engine_status[2],
+            text_color=self.engine_status[1],
             corner_radius=8,
             height=30
         )
@@ -204,6 +212,7 @@ class App(ctk.CTk):
         self.settings_tab = SettingsTab(self.tab_frames["settings"], on_settings_changed=self._on_settings_updated)
         
     def _on_settings_updated(self):
+        self.check_groq_status()
         self.chat_tab.sync_settings_state()
         self.refresh_sidebar_history()
         
@@ -243,7 +252,11 @@ class App(ctk.CTk):
             self.lbl_brand.pack_forget()
             self.lbl_history_title.pack_forget()
             self.history_scroll.pack_forget()
-            self.lbl_engine_badge.configure(text="⚡")
+            self.lbl_engine_badge.configure(
+                text="⚡",
+                text_color=self.engine_status[1],
+                fg_color=self.engine_status[2]
+            )
             for key, (btn, icon, title) in self.nav_buttons.items():
                 btn.configure(text=icon, anchor="center")
             self.sidebar_expanded = False
@@ -252,11 +265,54 @@ class App(ctk.CTk):
             self.lbl_brand.pack(side="left", padx=10)
             self.lbl_history_title.pack(side="left")
             self.history_scroll.pack(fill="both", expand=True, padx=6, pady=2, before=self.bottom_sidebar)
-            self.lbl_engine_badge.configure(text="⚡ Groq 120B Connected")
+            self.lbl_engine_badge.configure(
+                text=self.engine_status[0],
+                text_color=self.engine_status[1],
+                fg_color=self.engine_status[2]
+            )
             for key, (btn, icon, title) in self.nav_buttons.items():
                 btn.configure(text=f"  {icon}  {title}", anchor="w")
             self.sidebar_expanded = True
             self.refresh_sidebar_history()
+            
+    def check_groq_status(self):
+        """Asynchronously queries Groq status and updates the sidebar badge dynamically."""
+        def worker():
+            key = os.getenv("GROQ_API_KEY", "").strip()
+            if not key or key == "your_groq_api_key_here":
+                return ("⚠️ Groq: No API Key", "#F59E0B", "#2A2012")
+            try:
+                client = ai_chat.get_groq_client()
+                model = ai_chat.get_available_model(client)
+                short_model = model.split("/")[-1].replace("-versatile", "").upper()
+                return (f"⚡ Groq {short_model}", "#10B981", "#13241C")
+            except Exception:
+                return ("❌ Groq: Offline", "#EF4444", "#2D1515")
+
+        def on_success(status):
+            self.engine_status = status
+            if self.sidebar_expanded:
+                self.lbl_engine_badge.configure(
+                    text=status[0],
+                    text_color=status[1],
+                    fg_color=status[2]
+                )
+            else:
+                self.lbl_engine_badge.configure(
+                    text="⚡",
+                    text_color=status[1],
+                    fg_color=status[2]
+                )
+
+        run_async(worker, on_success=on_success, widget=self)
+
+    def _on_close(self):
+        """Clean up all Matplotlib figures on window close to eliminate memory leaks."""
+        try:
+            plt.close("all")
+        except Exception:
+            pass
+        self.destroy()
             
     def refresh_sidebar_history(self):
         for child in self.history_scroll.winfo_children():
