@@ -278,3 +278,19 @@ flowchart TD
 > **Answer:** "CSV files in the real world are not always comma-delimited; European files frequently use semicolons (`;`) and TSV exports use tabs (`\t`). In `upload_tab.py`, our ingestion pipeline utilizes a cascading fallback: it first attempts standard UTF-8 comma parsing; if a decode error occurs, it falls back to `latin-1`; if format errors occur, it activates Pandas' C/Python sniffing engine (`sep=None, engine='python'`) which analyzes the first few lines to deduce the true delimiter automatically."
 
 | `db.py` | `pd.read_sql(sql, conn)` emitted Pandas 2.0+ DBAPI `UserWarning` suggesting SQLAlchemy. | Harmless but cluttered console during startup and query runs. | Replaced `pd.read_sql` with native cursor execution (`cursor.fetchall() + pd.DataFrame()`), delivering clean console logs with zero warnings. |
+
+
+---
+
+## 🗺️ Master Engineering Improvement Roadmap (6 Phases)
+
+Below is the permanent master roadmap tracking code review improvements:
+
+1. **Phase 1 (COMPLETED & VERIFIED):** Real AST SQL Validation (`sqlglot`), Read-Only Session Protection & Fallback Signal
+   - *Status:* 21/21 pytest tests passing in `tests/test_sql_safety.py`.
+   - *Changes:* AST parsing enforced via `sqlglot`, dangerous functions (`SLEEP`, `BENCHMARK`, `LOAD_FILE`, `INTO OUTFILE/DUMPFILE`) blocked, `LIMIT 1000` enforced/capped, `REPLACE()` and backticked column names preserved, MySQL `SET SESSION TRANSACTION READ ONLY` and 5000ms execution timeout enabled.
+2. **Phase 2 (IN PROGRESS):** Privacy Toggle ("Send sample data to AI"), README Honesty, Cached Models & `requirements.txt` cleanup
+3. **Phase 3:** Universal Async Worker Threading (`widget.after()`), Matplotlib Memory Leak Fix & Dynamic Groq Badge
+4. **Phase 4:** DB Enhancements (Date parsing into DATETIME, Table overwrite confirmation, Connection Pool) & Multi-Feature Regression
+5. **Phase 5:** Chat Conversation Memory (last 3 Q&A) & UI Polish (Linear theme tokens, Toasts, Scrolling Card Stream)
+6. **Phase 6:** Full Test Suite, MIT License, GitHub Topics, and 10 Viva Voce Q&As

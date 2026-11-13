@@ -69,7 +69,7 @@ class SettingsTab:
         
         # Toggle 2: Automated Visual Charting
         row2 = ctk.CTkFrame(sec1, fg_color="transparent")
-        row2.pack(fill="x", padx=16, pady=(4, 14))
+        row2.pack(fill="x", padx=16, pady=4)
         
         self.sw_chart_var = ctk.BooleanVar(value=settings_manager.get_setting("auto_chart_enabled", True))
         self.sw_chart = ctk.CTkSwitch(
@@ -83,6 +83,23 @@ class SettingsTab:
             command=self._save_toggles
         )
         self.sw_chart.pack(side="left")
+
+        # Toggle 3: Data Privacy / Raw Sample Transmission Mode
+        row3 = ctk.CTkFrame(sec1, fg_color="transparent")
+        row3.pack(fill="x", padx=16, pady=(4, 14))
+        
+        self.sw_privacy_var = ctk.BooleanVar(value=settings_manager.get_setting("send_data_sample", False))
+        self.sw_privacy = ctk.CTkSwitch(
+            row3,
+            text="Send Data Sample to AI for Insights (Default: OFF — Strict Local Privacy Mode)",
+            variable=self.sw_privacy_var,
+            onvalue=True,
+            offvalue=False,
+            font=ctk.CTkFont(family="Segoe UI", size=13),
+            progress_color="#F59E0B",
+            command=self._save_toggles
+        )
+        self.sw_privacy.pack(side="left")
         
         # Section 2: Engine & History Maintenance
         sec2 = ctk.CTkFrame(self.card, fg_color="#18191E", corner_radius=10)
@@ -167,6 +184,7 @@ class SettingsTab:
     def _save_toggles(self):
         settings_manager.set_setting("ai_teacher_mode", self.sw_teacher_var.get())
         settings_manager.set_setting("auto_chart_enabled", self.sw_chart_var.get())
+        settings_manager.set_setting("send_data_sample", self.sw_privacy_var.get())
         if self.on_settings_changed:
             self.on_settings_changed()
             

@@ -32,24 +32,41 @@ def get_groq_client():
     return Groq(api_key=api_key)
 
 
-def get_available_model(client):
+# Cached available Groq model ID to avoid redundant API network roundtrips
+_CACHED_AVAILABLE_MODEL = None
+
+
+def get_available_model(client, force_refresh=False):
+    """
+    Returns the optimal active model for SQL generation and analysis.
+    Caches model discovery to save network roundtrips on every query.
+    """
+    global _CACHED_AVAILABLE_MODEL
+    if _CACHED_AVAILABLE_MODEL and not force_refresh:
+        return _CACHED_AVAILABLE_MODEL
+
+    # Verified Groq LPU models in order of analytical capability
     preferred = [
         "openai/gpt-oss-120b",
         "qwen/qwen3.8-27b",
         "openai/gpt-oss-20b",
-        "llama-3.3-70b-versatile"
+        "allam-2-7b"
     ]
     try:
         remote_models = {m.id for m in client.models.list().data}
         for model in preferred:
             if model in remote_models:
+                _CACHED_AVAILABLE_MODEL = model
                 return model
         for m_id in remote_models:
             if "gpt-oss" in m_id or "qwen" in m_id:
+                _CACHED_AVAILABLE_MODEL = m_id
                 return m_id
     except Exception:
         pass
-    return "openai/gpt-oss-120b"
+        
+    _CACHED_AVAILABLE_MODEL = "openai/gpt-oss-120b"
+    return _CACHED_AVAILABLE_MODEL
 
 
 def build_schema_prompt(table_name, schema):
@@ -208,7 +225,16 @@ def generate_sql(table_name, schema, user_question, model=None):
         return None, f"Groq API Error: {e}", False
 
 
-def summarize_results(user_question, df, model=None):
+def summarize_results(user_question, df, model=None, send_sample=False):
+    """
+    Synthesizes a conversational plain-English takeaway explaining query results.
+    
+    Privacy Model:
+      - If send_sample=False (Default): Transmits ONLY column headers, row counts, and
+        summary statistical aggregates (Min, Mean, Max). Zero raw data rows leave local MySQL!
+      - If send_sample=True (Opt-in via Settings): Transmits a small sample preview
+        (up to 8 rows x 10 cols) for granular qualitative context.
+    """
     if df is None or df.empty:
         return "No records were found matching this criteria in the database."
         
@@ -220,24 +246,43 @@ def summarize_results(user_question, df, model=None):
     if not model:
         model = get_available_model(client)
         
-    # Take a clean preview without overwhelming tokens if wide dataset
-    clean_sample = df.head(8).fillna('-')
-    if len(clean_sample.columns) > 10:
-        clean_sample = clean_sample.iloc[:, :10]
-    sample_data = clean_sample.to_string(index=False)
     total_rows = len(df)
+    
+    if send_sample:
+        clean_sample = df.head(8).fillna('-')
+        if len(clean_sample.columns) > 10:
+            clean_sample = clean_sample.iloc[:, :10]
+        data_context = f"Data Sample (First {len(clean_sample)} rows):\n{clean_sample.to_string(index=False)}"
+    else:
+        # Privacy-Preserving Mode: Send only statistical summaries
+        numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
+        numeric_cols = [c for c in numeric_cols if c != '_id']
+        agg_lines = []
+        for col in numeric_cols[:8]:
+            s = df[col].dropna()
+            if not s.empty:
+                agg_lines.append(f"- {col}: Min = {s.min():.2f}, Mean = {s.mean():.2f}, Max = {s.max():.2f}")
+                
+        col_list = [c for c in df.columns if c != '_id'][:12]
+        col_summary = f"Columns Available: {', '.join(col_list)}"
+        if agg_lines:
+            agg_summary = "Aggregate Statistical Summary (No raw data rows transmitted):\n" + "\n".join(agg_lines)
+        else:
+            agg_summary = f"Distinct Categories / Records: {total_rows} matching rows."
+            
+        data_context = f"{col_summary}\n{agg_summary}"
     
     system_prompt = (
         "You are a friendly, expert Senior Data Analyst & Educator.\n"
-        "Review the user's question and the returned tabular records, then write a helpful, conversational "
+        "Review the user's question and the returned result summary, then write a helpful, conversational "
         "2-to-4 sentence plain-English explanation.\n"
-        "Explain what the numbers show, what patterns emerge, and what actionable takeaways the user can learn from this."
+        "Explain what the patterns and numbers mean, and what actionable takeaways the user can learn from this."
     )
     
     user_prompt = (
         f"User Question: \"{user_question}\"\n"
         f"Total Records: {total_rows}\n"
-        f"Data Sample:\n{sample_data}\n\n"
+        f"{data_context}\n\n"
         f"Provide the plain-English takeaway:"
     )
     

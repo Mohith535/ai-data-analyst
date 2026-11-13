@@ -278,7 +278,8 @@ class ChatTab:
         text_summary = None
         if teacher_on:
             self.parent.after(0, lambda: self.lbl_status.configure(text="Synthesizing Insight...", text_color="#818CF8"))
-            text_summary = ai_chat.summarize_results(question, df)
+            send_sample = settings_manager.get_setting("send_data_sample", False)
+            text_summary = ai_chat.summarize_results(question, df, send_sample=send_sample)
             
         self.parent.after(0, self._update_ui_with_results, sql, df, text_summary, is_fallback)
         

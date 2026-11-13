@@ -70,20 +70,23 @@ The application is structured into 6 specialized tabs accessible via the collaps
 | 💬 **AI Analyst Chat** | Conversational Business Intelligence | Natural English $\rightarrow$ MySQL 8.0 `SELECT` compilation, automated plain-English takeaways (AI Teacher Mode), auto-charting, and 2-page Executive PDF Dossier export. |
 | 📂 **Upload Dataset** | Data Ingestion & Quality Audit | CSV file loading with delimiter sniffing, persistent high-contrast data table preview, and automated hygiene profiling (completeness %, duplicate count, null count, IQR outliers). |
 | 📊 **Visual Studio** | Statistical Visual Analytics | High-resolution Matplotlib charts (Bar, Trend Line, Donut/Pie, Distribution Histogram) styled in macOS dark aesthetics with smart downsampling. |
-| 🌐 **Interactive Studio** | GPU 3D & Zoomable Canvas | Interactive Plotly 3D scatter plots, zoomable lines, box-plot quartile distributions, and correlation heatmaps opened in your browser. |
+| 🌐 **Interactive Studio** | Interactive 3D & Zoomable Canvas | Interactive Plotly 3D scatter plots, zoomable lines, box-plot quartile distributions, and correlation heatmaps opened in your browser using WebGL. |
 | 🤖 **ML Workbench** | Machine Learning Pipelines | **Linear Regression** (80/20 train/test evaluation, $R^2$ score, MAE, dynamic equation line) and **K-Means Clustering** ($K \in [2, 20]$, `StandardScaler` normalization, centroids). |
-| ⚙️ **Settings & Prefs** | System Customization | Toggle AI Teacher Mode ON/OFF, toggle auto-charts, clear recent query cache, and test live Groq API connectivity. |
+| ⚙️ **Settings & Prefs** | System Customization | Toggle AI Teacher Mode ON/OFF, toggle auto-charts, toggle Privacy Mode (zero raw rows sent to AI), clear recent query cache, and test live Groq API connectivity. |
 
 ---
 
 ## 🔒 Security & Privacy Architecture
 
-- **Privacy-Preserving Schema Extraction:** Your raw data records **never** leave your local MySQL database. Only table schemas (`DESCRIBE table`) and user questions are sent to Groq.
-- **SQL Injection Firewall:** Generated queries pass strict AST and regex validation:
-  - Whitelist: Only starts with `SELECT` or `WITH`.
-  - Blacklist: Flags any occurrence of `DROP`, `DELETE`, `INSERT`, `UPDATE`, `ALTER`, `TRUNCATE`, `GRANT`, `REVOKE`.
-  - Anti-Chaining: Semicolons (`;`) are banned to eliminate stacked statement injection.
-- **Self-Healing SQL Fallback:** If the LLM generates conversational text or non-SELECT output on broad prompts, the system automatically catches it and falls back to a clean overview query (`SELECT * FROM table LIMIT 25`) with zero user disruption.
+- **Privacy-First Data Architecture:** By default, raw data records **never** leave your local MySQL instance. When translating English to SQL, only the lightweight table schema (`DESCRIBE table`) is sent to Groq. When generating plain-English takeaways, only aggregate statistical summaries (min, mean, max, row count) are transmitted. Users can optionally toggle *"Send Data Sample to AI"* in Settings if they want the AI to cite specific row values.
+- **AST SQL Injection Firewall:** Every generated query is parsed into an Abstract Syntax Tree using `sqlglot` (MySQL dialect) before execution:
+  - **Single Statement Enforcement:** Allows exactly one statement of type `SELECT` or `WITH ... SELECT` (CTEs).
+  - **DDL/DML Ban:** Structurally blocks `INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`, `CREATE`, and `TRUNCATE`.
+  - **Anti-Exfiltration:** Blocks file output clauses (`INTO OUTFILE` and `INTO DUMPFILE`).
+  - **Anti-DoS:** Rejects server-freezing functions (`SLEEP()`, `BENCHMARK()`, `LOAD_FILE()`).
+  - **Automatic Row Capping:** Automatically injects or caps queries to `LIMIT 1000`.
+- **Database Session Defense-in-Depth:** All analytical queries run with `SET SESSION TRANSACTION READ ONLY` and a 5,000ms execution timeout (`max_execution_time`).
+- **Self-Healing SQL Fallback:** If the LLM generates conversational text or non-SELECT output on broad prompts, the system automatically catches it and falls back to a clean overview query (`SELECT * FROM table LIMIT 25`) with a clear user notification banner.
 - **Threaded Execution:** All AI inference and database operations run in daemon background threads (`threading.Thread`) to keep the CustomTkinter GUI responsive at 60 FPS.
 
 ---

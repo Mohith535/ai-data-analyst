@@ -15,6 +15,7 @@ SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "settings.json")
 DEFAULT_SETTINGS = {
     "ai_teacher_mode": True,
     "auto_chart_enabled": True,
+    "send_data_sample": False,
     "theme": "dark"
 }
 
