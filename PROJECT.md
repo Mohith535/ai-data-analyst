@@ -386,3 +386,40 @@ Below is the permanent master roadmap tracking code review improvements:
 - Line 90: Removed "60 FPS" — Tkinter does not expose or guarantee frame rate; replaced with "keeps the GUI responsive during long-running operations".
 
 **Test Suite:** Expanded from 32 → **38/38 passing** (+6 new tests).
+
+#### Phase B: UI Polish & Modern Linear Aesthetic (2026-11-14)
+
+**B1. Lucide-Style Monochrome PNG Icons (`assets/icons/`, `ui/app.py`):**
+- Generated crisp 24x24 PNG icons via Pillow in `assets/icons/` (`chat.png`, `upload.png`, `charts.png`, `interactive.png`, `ml.png`, `settings.png`).
+- Loaded into CustomTkinter using `ctk.CTkImage` with LANCZOS downsampling to guarantee crisp display on standard and HiDPI/Retina displays.
+- Replaced OS-dependent emoji characters on sidebar buttons with consistent minimalist monochrome icons.
+- Sidebar collapse/expand keeps icon alignment and compound text layout intact.
+
+**B2. Modern Linear-Style Treeview Engine (`ui/theme.py`, `ui/upload_tab.py`, `ui/chat_tab.py`):**
+- High-contrast dark styling (`#14161B` canvas, `#1E2027` header, 28px row height).
+- Zebra striping with alternating row tags (`even` = `#14161B`, `odd` = `#181A22`).
+- Interactive header sorting: supports numeric-aware and alphabetical sorting, updates column header with ascending `▲` / descending `▼` indicator, and automatically re-stripes alternating zebra rows upon sorting.
+- Subtle row hover highlight (`#282D3D`) via `<Motion>` and `<Leave>` tracking, smoothly restoring original tags.
+- Centralized into `populate_modern_treeview()` in `ui/theme.py` and shared across `UploadTab` and `ChatTab`.
+
+**B3. Global & Tab Keyboard Shortcuts (`ui/app.py`, `ui/chat_tab.py`):**
+- Bound `<Control-1>` through `<Control-6>` globally at root window level to instantaneously switch between the 6 tabs.
+- Bound `<Control-Return>` in `ChatTab` question input to trigger AI query execution.
+- Bound `<Escape>` in `ChatTab` question input to instantly clear the search prompt.
+- Updated prompt bar placeholder with shortcut discovery hint (`Ctrl+Enter to send, Esc to clear`).
+
+**B4. Interactive Chart Hover Tooltips (`charts.py`, `ui/charts_tab.py`, `ui/chat_tab.py`, `ui/ml_tab.py`):**
+- Integrated `mplcursors` (v0.7.1, with `matplotlib` updated to 3.11.2 in `requirements.txt`).
+- Created `charts.add_chart_tooltips(fig)` with sleek dark card tooltip styling (`#121316` card, `#5E6AD2` purple accent border, `#F8FAFC` crisp text).
+- Automatically attached to embedded charts across Visual Studio, AI Chat Auto-Charts, and ML Workbench. Gracefully degrades during PDF export.
+
+**B5. Executive KPI Summary Cards (`ui/upload_tab.py`):**
+- Replaced plain text audit banner with a 4-card Linear-style executive KPI grid:
+  1. **TOTAL ROWS** (Blue `#3B82F6`) — total records loaded.
+  2. **COLUMNS** (Violet `#8B5CF6`) — feature count and numeric column summary.
+  3. **COMPLETENESS** (Emerald `#10B981`) — data completeness percentage with missing cell count.
+  4. **DUPLICATES** (Amber `#F59E0B`) — duplicate row count and IQR outlier detection count.
+
+**B6. Test Suite Expansion (`tests/test_phase_b.py`):**
+- Added 10 new test cases verifying assets integrity, mplcursors tooltip attachments, and theme helpers.
+- Test suite expanded from 38 → **48/48 passing unit tests**.

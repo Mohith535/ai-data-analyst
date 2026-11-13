@@ -286,8 +286,11 @@ class App(ctk.CTk):
                 text_color=self.engine_status[1],
                 fg_color=self.engine_status[2]
             )
-            for key, (btn, icon, title) in self.nav_buttons.items():
-                btn.configure(text=icon, anchor="center")
+            for key, (btn, ctk_icon, emoji, title) in self.nav_buttons.items():
+                if ctk_icon:
+                    btn.configure(text="", image=ctk_icon, anchor="center")
+                else:
+                    btn.configure(text=emoji, image=None, anchor="center")
             self.sidebar_expanded = False
         else:
             self.sidebar_frame.configure(width=240)
@@ -299,8 +302,11 @@ class App(ctk.CTk):
                 text_color=self.engine_status[1],
                 fg_color=self.engine_status[2]
             )
-            for key, (btn, icon, title) in self.nav_buttons.items():
-                btn.configure(text=f"  {icon}  {title}", anchor="w")
+            for key, (btn, ctk_icon, emoji, title) in self.nav_buttons.items():
+                if ctk_icon:
+                    btn.configure(text=f"  {title}", image=ctk_icon, compound="left", anchor="w")
+                else:
+                    btn.configure(text=f"  {emoji}  {title}", image=None, anchor="w")
             self.sidebar_expanded = True
             self.refresh_sidebar_history()
             

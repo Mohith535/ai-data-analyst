@@ -24,7 +24,7 @@ import ai_chat
 import report_generator
 import history_manager
 import settings_manager
-from ui.theme import Toast
+from ui.theme import Toast, populate_modern_treeview
 
 
 class ChatTab:
@@ -130,7 +130,7 @@ class ChatTab:
         
         self.entry_question = ctk.CTkEntry(
             prompt_inner,
-            placeholder_text="Ask anything... (follow-ups work too: 'filter that to South region', 'sort by price')",
+            placeholder_text="Ask anything... (Ctrl+Enter to send, Esc to clear)",
             font=ctk.CTkFont(family="Segoe UI", size=14),
             height=46,
             fg_color="#18191E",
@@ -139,6 +139,8 @@ class ChatTab:
         )
         self.entry_question.pack(side="left", fill="x", expand=True, padx=(0, 8))
         self.entry_question.bind("<Return>", lambda event: self.ask_ai())
+        self.entry_question.bind("<Control-Return>", lambda event: self.ask_ai())
+        self.entry_question.bind("<Escape>", lambda event: self._clear_input())
         
         # Clear Memory Button
         self.btn_clear_mem = ctk.CTkButton(
@@ -506,6 +508,10 @@ class ChatTab:
         except Exception as e:
             print(f"[HISTORY ERROR] {e}")
             
+    def _clear_input(self):
+        """Clears the prompt entry bar when user presses Escape."""
+        self.entry_question.delete(0, "end")
+
     def _display_table(self, df):
         self.table_placeholder.pack_forget()
         
@@ -521,24 +527,6 @@ class ChatTab:
             return
             
         if self.tree is None:
-            style = ttk.Style()
-            style.theme_use("default")
-            style.configure(
-                "Treeview",
-                background="#16181D",
-                foreground="#E2E8F0",
-                fieldbackground="#16181D",
-                rowheight=28,
-                font=('Segoe UI', 10)
-            )
-            style.configure(
-                "Treeview.Heading",
-                background="#22252C",
-                foreground="#F8FAFC",
-                font=('Segoe UI', 10, 'bold')
-            )
-            style.map("Treeview", background=[("selected", "#5E6AD2")])
-            
             self.tree_scroll_y = ttk.Scrollbar(self.tree_container, orient="vertical")
             self.tree_scroll_x = ttk.Scrollbar(self.tree_container, orient="horizontal")
             
@@ -560,20 +548,7 @@ class ChatTab:
             self.tree_scroll_x.pack(side="bottom", fill="x")
             self.tree.pack(fill="both", expand=True)
             
-        # Clear previous rows
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-            
-        columns = list(df.columns)
-        self.tree["columns"] = columns
-        
-        for col in columns:
-            self.tree.heading(col, text=str(col), anchor="w")
-            self.tree.column(col, width=max(90, min(220, len(str(col)) * 12 + 25)), anchor="w")
-            
-        for _, row in df.head(100).iterrows():
-            vals = [str(v) if v is not None and str(v) != "nan" else "" for v in row]
-            self.tree.insert("", "end", values=vals)
+        populate_modern_treeview(self.tree, df, max_rows=100)
             
     def _display_chart(self, df):
         # Prevent memory leaks: close previous figure before rendering new auto-chart
@@ -595,6 +570,7 @@ class ChatTab:
             self.chart_placeholder.pack(expand=True)
             return
             
+        charts.add_chart_tooltips(fig)
         self.current_canvas = FigureCanvasTkAgg(fig, master=self.chart_container)
         self.current_canvas.draw()
         self.current_canvas.get_tk_widget().pack(fill="both", expand=True, padx=4, pady=4)

@@ -243,3 +243,39 @@ def create_auto_chart(df, title="AI Analysis Result"):
         return create_bar_chart(df, cols[0], cols[1], title=title)
         
     return None
+
+
+def add_chart_tooltips(fig):
+    """
+    Attaches interactive dark-themed hover tooltips to all axes in fig using mplcursors.
+    
+    Why (Viva Defense):
+      Static plots require users to mentally project coordinates across grid lines.
+      Adding client-side hover cursors provides instantaneous data inspection (precise
+      value readout, bar category) without adding network latency or heavy JavaScript runtimes.
+      Gracefully degrades if mplcursors is unavailable or during headless PDF exports.
+    """
+    if fig is None:
+        return
+    try:
+        import mplcursors
+        for ax in fig.get_axes():
+            if getattr(ax, "_has_mplcursor", False):
+                continue
+            ax._has_mplcursor = True
+            cursor = mplcursors.cursor(ax, hover=True)
+
+            @cursor.connect("add")
+            def _style_tooltip(sel):
+                sel.annotation.set_bbox(dict(
+                    boxstyle="round,pad=0.4",
+                    facecolor="#121316",
+                    edgecolor="#5E6AD2",
+                    linewidth=1.2,
+                    alpha=0.95
+                ))
+                sel.annotation.get_text().set_color("#F8FAFC")
+                sel.annotation.get_text().set_fontsize(9)
+                sel.annotation.get_text().set_fontweight("medium")
+    except Exception:
+        pass

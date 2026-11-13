@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import db
 import ml
+import charts
 from ui.async_helper import run_async
 
 
@@ -251,6 +252,7 @@ class MLTab:
             self.current_canvas.get_tk_widget().destroy()
             self.current_canvas = None
         self.placeholder.pack_forget()
+        charts.add_chart_tooltips(fig)
         self.current_canvas = FigureCanvasTkAgg(fig, master=self.chart_frame)
         self.current_canvas.draw()
         self.current_canvas.get_tk_widget().pack(fill="both", expand=True, padx=8, pady=8)

@@ -16,6 +16,7 @@ import os
 import db
 import data_quality
 from ui.async_helper import run_async
+from ui.theme import populate_modern_treeview
 
 
 class TableConflictModal(ctk.CTkToplevel):
@@ -150,27 +151,55 @@ class UploadTab:
         )
         self.lbl_status.pack(side="left", padx=5)
         
-        # --- Metadata & Quality Audit Banner ---
-        self.audit_frame = ctk.CTkFrame(parent, fg_color="#121316", corner_radius=12)
-        self.audit_frame.pack(fill="x", padx=16, pady=4)
-        
-        audit_inner = ctk.CTkFrame(self.audit_frame, fg_color="transparent")
-        audit_inner.pack(fill="x", padx=14, pady=8)
-        
-        ctk.CTkLabel(
-            audit_inner,
-            text="🛡️ Dataset Hygiene & Quality Audit:",
-            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
-            text_color="#818CF8"
-        ).pack(side="left", padx=(0, 10))
-        
-        self.lbl_audit_stats = ctk.CTkLabel(
-            audit_inner,
-            text="Completeness: --  |  Missing Values: --  |  Duplicates: --  |  Outliers: --",
-            font=ctk.CTkFont(family="Consolas", size=11),
-            text_color="#E2E8F0"
-        )
-        self.lbl_audit_stats.pack(side="left")
+        # --- Metadata & Quality Audit: 4 Linear-style KPI Cards ---
+        # Why (Viva Defense):
+        #   Instead of a single plain text string, modern enterprise data platforms
+        #   (Linear, Datadog, Snowflake) use prominent executive KPI summary cards
+        #   that highlight dataset dimensions, completeness ratio, and hygiene at a glance.
+        self.kpi_container = ctk.CTkFrame(parent, fg_color="transparent")
+        self.kpi_container.pack(fill="x", padx=16, pady=4)
+        self.kpi_container.grid_columnconfigure((0, 1, 2, 3), weight=1, uniform="kpi")
+
+        def _make_kpi_card(col_idx, title, default_val, accent_color, subtext):
+            card = ctk.CTkFrame(
+                self.kpi_container,
+                fg_color="#121316",
+                border_color="#1E2024",
+                border_width=1,
+                corner_radius=10
+            )
+            card.grid(row=0, column=col_idx, padx=4, pady=2, sticky="nsew")
+
+            lbl_title = ctk.CTkLabel(
+                card,
+                text=title,
+                font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
+                text_color="#94A3B8"
+            )
+            lbl_title.pack(anchor="w", padx=12, pady=(8, 2))
+
+            lbl_val = ctk.CTkLabel(
+                card,
+                text=default_val,
+                font=ctk.CTkFont(family="Segoe UI", size=20, weight="bold"),
+                text_color=accent_color
+            )
+            lbl_val.pack(anchor="w", padx=12, pady=0)
+
+            lbl_sub = ctk.CTkLabel(
+                card,
+                text=subtext,
+                font=ctk.CTkFont(family="Segoe UI", size=10),
+                text_color="#64748B"
+            )
+            lbl_sub.pack(anchor="w", padx=12, pady=(0, 8))
+
+            return lbl_val, lbl_sub
+
+        self.kpi_rows_val, self.kpi_rows_sub = _make_kpi_card(0, "TOTAL ROWS", "—", "#3B82F6", "Dataset records")
+        self.kpi_cols_val, self.kpi_cols_sub = _make_kpi_card(1, "COLUMNS", "—", "#8B5CF6", "Features / fields")
+        self.kpi_comp_val, self.kpi_comp_sub = _make_kpi_card(2, "COMPLETENESS", "—", "#10B981", "Data hygiene score")
+        self.kpi_dups_val, self.kpi_dups_sub = _make_kpi_card(3, "DUPLICATES", "—", "#F59E0B", "Redundant entries")
         
         # --- Table Preview Frame ---
         self.table_frame = ctk.CTkFrame(parent, fg_color="#121316", corner_radius=12)
@@ -207,7 +236,10 @@ class UploadTab:
             text=f"⏳ Loading and auditing {filename}...",
             text_color="#60A5FA"
         )
-        self.lbl_audit_stats.configure(text="Profiling dataset hygiene & outliers in background...")
+        self.kpi_rows_val.configure(text="...")
+        self.kpi_cols_val.configure(text="...")
+        self.kpi_comp_val.configure(text="...")
+        self.kpi_dups_val.configure(text="...")
         
         def worker():
             try:
@@ -237,22 +269,44 @@ class UploadTab:
                 text=f"Loaded: {self.current_filename}",
                 text_color="#34D399"
             )
-            if audit:
-                total_outliers = sum(c["outliers"] for c in audit["columns"])
-                audit_str = (
-                    f"Completeness: {audit['completeness']}%  |  "
-                    f"Missing: {audit['total_missing']} cells  |  "
-                    f"Duplicates: {audit['duplicates']} rows  |  "
-                    f"IQR Outliers: {total_outliers}"
-                )
-                self.lbl_audit_stats.configure(text=audit_str)
+            
+            # Populate KPI Metrics Cards
+            total_rows = len(df)
+            total_cols = len(df.columns)
+            completeness = audit.get('completeness', 100.0) if audit else round((1 - df.isnull().sum().sum() / max(1, (len(df) * len(df.columns)))) * 100, 1)
+            duplicates = audit.get('duplicates', 0) if audit else int(df.duplicated().sum())
+            total_missing = audit.get('total_missing', 0) if audit else int(df.isnull().sum().sum())
+            total_outliers = sum(c.get("outliers", 0) for c in audit.get("columns", [])) if audit else 0
+
+            self.kpi_rows_val.configure(text=f"{total_rows:,}")
+            self.kpi_rows_sub.configure(text="Total active records")
+
+            self.kpi_cols_val.configure(text=f"{total_cols}")
+            num_cols = len(df.select_dtypes(include='number').columns)
+            self.kpi_cols_sub.configure(text=f"{num_cols} numeric features")
+
+            self.kpi_comp_val.configure(text=f"{completeness}%")
+            self.kpi_comp_sub.configure(
+                text=f"{total_missing:,} missing cells",
+                text_color="#10B981" if total_missing == 0 else "#F59E0B"
+            )
+
+            self.kpi_dups_val.configure(text=f"{duplicates:,}")
+            self.kpi_dups_sub.configure(
+                text=f"{total_outliers} IQR outliers",
+                text_color="#10B981" if duplicates == 0 else "#EF4444"
+            )
+            
             self.btn_save.configure(state="normal")
             self._display_dataframe(df)
 
         def on_error(exc):
             self.btn_select.configure(state="normal")
             self.lbl_status.configure(text="Failed to load dataset", text_color="#EF4444")
-            self.lbl_audit_stats.configure(text="Completeness: --  |  Missing Values: --  |  Duplicates: --")
+            self.kpi_rows_val.configure(text="—")
+            self.kpi_cols_val.configure(text="—")
+            self.kpi_comp_val.configure(text="—")
+            self.kpi_dups_val.configure(text="—")
             messagebox.showerror("File Error", f"Failed to load file:\n{exc}")
 
         run_async(worker, on_success=on_success, on_error=on_error, widget=self.parent)
@@ -263,24 +317,6 @@ class UploadTab:
         
         # If treeview and scrollbars don't exist yet, construct them permanently
         if self.tree is None:
-            style = ttk.Style()
-            style.theme_use("default")
-            style.configure(
-                "Treeview",
-                background="#16181D",
-                foreground="#E2E8F0",
-                fieldbackground="#16181D",
-                rowheight=26,
-                font=('Segoe UI', 9)
-            )
-            style.configure(
-                "Treeview.Heading",
-                background="#22252C",
-                foreground="#F8FAFC",
-                font=('Segoe UI', 10, 'bold')
-            )
-            style.map("Treeview", background=[("selected", "#5E6AD2")])
-            
             self.tree_scroll_y = ttk.Scrollbar(self.inner_table_box, orient="vertical")
             self.tree_scroll_x = ttk.Scrollbar(self.inner_table_box, orient="horizontal")
             
@@ -299,24 +335,7 @@ class UploadTab:
             self.tree_scroll_x.pack(side="bottom", fill="x")
             self.tree.pack(fill="both", expand=True)
             
-        # Clear any existing rows
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-            
-        # Re-map columns dynamically
-        columns = list(df.columns)
-        self.tree["columns"] = columns
-        
-        for col in columns:
-            self.tree.heading(col, text=str(col), anchor="w")
-            width = max(90, min(240, len(str(col)) * 11 + 25))
-            self.tree.column(col, width=width, minwidth=80, anchor="w")
-            
-        # Populate rows
-        display_df = df.head(max_rows)
-        for _, row in display_df.iterrows():
-            values = [str(v) if pd.notna(v) else "" for v in row]
-            self.tree.insert("", "end", values=values)
+        populate_modern_treeview(self.tree, df, max_rows=max_rows)
 
     def save_to_mysql(self):
         if self.current_df is None:
