@@ -6,6 +6,7 @@
 [![Scikit-Learn](https://img.shields.io/badge/ML-Scikit--Learn-F7931E?style=for-the-badge&logo=scikit-learn&logoColor=white)](https://scikit-learn.org)
 [![Groq](https://img.shields.io/badge/Inference-Groq%20Cloud%20LPU-F55036?style=for-the-badge)](https://groq.com)
 [![Plotly](https://img.shields.io/badge/3D%20Graphics-Plotly-3F4F75?style=for-the-badge&logo=plotly&logoColor=white)](https://plotly.com)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
 A Linear/Raycast-inspired dark desktop analytics platform built with Python. Ingest datasets, automatically audit hygiene & statistical outliers, persist to a local MySQL database with column sanitization, render Matplotlib & interactive Plotly 3D visualisations, fit explainable Scikit-Learn Machine Learning models, and converse with an AI Analyst powered by Groq's fast inference engine.
 
@@ -74,6 +75,37 @@ The application is structured into 6 specialized tabs accessible via the collaps
 | 🤖 **ML Workbench** | Machine Learning Pipelines | **Linear Regression** (80/20 train/test evaluation, $R^2$ score, MAE, dynamic equation line) and **K-Means Clustering** ($K \in [2, 20]$, `StandardScaler` normalization, centroids). |
 | ⚙️ **Settings & Prefs** | System Customization | Toggle AI Teacher Mode ON/OFF, toggle auto-charts, toggle Privacy Mode (zero raw rows sent to AI), clear recent query cache, and test live Groq API connectivity. |
 
+### 📸 Visual Workspace Gallery
+
+<div align="center">
+
+| 💬 **AI Analyst Chat & Auto-Visualizations** | 📂 **Dataset Ingestion & Quality Audit** |
+|:---:|:---:|
+| ![AI Analyst Chat](docs/screenshots/chat_tab.png) | ![Dataset Ingestion](docs/screenshots/upload_tab.png) |
+
+| 📊 **Visual Studio (Matplotlib Dark Theme)** | 🤖 **Machine Learning Workbench** |
+|:---:|:---:|
+| ![Visual Studio](docs/screenshots/charts_tab.png) | ![ML Workbench](docs/screenshots/ml_tab.png) |
+
+| 🌐 **Interactive 3D Studio (WebGL)** | ⚙️ **System Settings & Privacy Toggles** |
+|:---:|:---:|
+| ![Interactive 3D Studio](docs/screenshots/interactive_tab.png) | ![System Settings](docs/screenshots/settings_tab.png) |
+
+</div>
+
+### ⌨️ Productivity Keyboard Shortcuts
+
+| Shortcut | Action | Scope |
+|:---:|---|---|
+| `Ctrl + 1` | Switch to AI Analyst Chat | Global (Any Tab) |
+| `Ctrl + 2` | Switch to Dataset Ingestion | Global (Any Tab) |
+| `Ctrl + 3` | Switch to Visual Studio Analytics | Global (Any Tab) |
+| `Ctrl + 4` | Switch to Interactive 3D Studio | Global (Any Tab) |
+| `Ctrl + 5` | Switch to Machine Learning Workbench | Global (Any Tab) |
+| `Ctrl + 6` | Switch to Settings & Preferences | Global (Any Tab) |
+| `Ctrl + Enter` | Submit natural language question to Groq AI | AI Analyst Chat |
+| `Escape` | Clear question input bar | AI Analyst Chat |
+
 ---
 
 ## 🔒 Security & Privacy Architecture
@@ -138,7 +170,22 @@ Developed for B.Tech CSE (AI & ML) evaluation at SRMIST Chennai. Core concepts c
 - **Outlier Detection:** The Interquartile Range rule ($\text{IQR} = Q_3 - Q_1$, bounds $= [Q_1 - 1.5\text{IQR}, Q_3 + 1.5\text{IQR}]$) for distribution-free anomaly detection.
 - **Event-Driven Asynchronous UI:** Separation of Tkinter's single-threaded event loop from background network/database worker threads using `parent.after(0, ...)`.
 
-*(See [PROJECT.md](PROJECT.md) for the full 15-question Viva Voce preparation manual).*
+*(See [PROJECT.md](PROJECT.md) for the architectural dossier and [VIVA_QUESTIONS.md](VIVA_QUESTIONS.md) for the 30 Viva Voce questions & answers).*
+
+---
+
+## 🏷️ Recommended GitHub Metadata
+
+- **Repository Description:**  
+  `Linear-inspired dark desktop analytics studio with AST SQL firewall, Groq text-to-SQL, ML pipelines & interactive 3D visualizations.`
+- **Repository Topics:**  
+  `python`, `customtkinter`, `mysql`, `groq`, `data-analyst`, `machine-learning`, `scikit-learn`, `matplotlib`, `plotly`, `sqlglot`, `data-visualization`, `desktop-app`, `fpdf2`, `mplcursors`
+
+---
+
+## 📄 License
+
+This project is open-source and available under the [MIT License](LICENSE).
 
 ---
 

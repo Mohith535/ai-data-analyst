@@ -423,3 +423,26 @@ Below is the permanent master roadmap tracking code review improvements:
 **B6. Test Suite Expansion (`tests/test_phase_b.py`):**
 - Added 10 new test cases verifying assets integrity, mplcursors tooltip attachments, and theme helpers.
 - Test suite expanded from 38 → **48/48 passing unit tests**.
+
+#### Phase C: Repository Infrastructure, Screenshots & Open-Source Packaging (2026-11-14)
+
+**C1. High-Resolution Visual Gallery (`docs/screenshots/`, `README.md`):**
+- Curated and stored 6 high-resolution 1024x576 UI screenshots in `docs/screenshots/` covering all primary workspace views:
+  * `chat_tab.png` — AI Analyst Chat with live SQL view & auto-charting
+  * `upload_tab.png` — Dataset Ingestion with executive KPI cards & Treeview
+  * `charts_tab.png` — Visual Studio with macOS dark theme charts
+  * `ml_tab.png` — Machine Learning Workbench with regression & clustering
+  * `interactive_tab.png` — Interactive 3D WebGL studio
+  * `settings_tab.png` — Preferences, AI Teacher Mode & Privacy toggles
+- Embedded into a structured two-column gallery in `README.md`.
+
+**C2. MIT License (`LICENSE`):**
+- Authored standard permissive MIT License file granting open-source distribution and commercial usage rights under copyright of K Mohith Kannan (2024–2026).
+- Embedded MIT License shield in `README.md`.
+
+**C3. Recommended GitHub Metadata:**
+- **Description:** `Linear-inspired dark desktop analytics studio with AST SQL firewall, Groq text-to-SQL, ML pipelines & interactive 3D visualizations.`
+- **Topics:** `python`, `customtkinter`, `mysql`, `groq`, `data-analyst`, `machine-learning`, `scikit-learn`, `matplotlib`, `plotly`, `sqlglot`, `data-visualization`, `desktop-app`, `fpdf2`, `mplcursors`
+
+**C4. Academic Viva Voce Master Manual (`VIVA_QUESTIONS.md`):**
+- Created standalone reference dossier containing 30 comprehensive Viva Voce questions and concise technical answers covering AST parsing, thread synchronization, locking reads, memory management, data science math, and UI engineering.
