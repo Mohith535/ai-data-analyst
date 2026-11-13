@@ -1,10 +1,12 @@
 """
-chat_tab.py — AI Chat Tab UI (Synchronized with Global Settings)
-==================================================================
-Highlights:
-  - Dynamically reads `ai_teacher_mode` and `auto_chart_enabled` from `settings_manager`
-  - Self-healing Text-to-SQL compiler with automatic fallback
-  - Dedicated PDF Dossier export
+chat_tab.py — AI Chat Tab UI (Conversational Memory & Toast Notifications)
+==========================================================================
+Phase 5 enhancements:
+  - Rolling conversation memory (last 3 Q&A turns) enables natural follow-ups
+    like "filter that to South" or "what was the average for those?"
+  - Toast notification system for non-intrusive success/error/warning feedback
+  - Scrolling query card stream replaces static text boxes
+  - Column suggestion chips auto-populate from active table schema
 """
 
 import threading
@@ -22,10 +24,14 @@ import ai_chat
 import report_generator
 import history_manager
 import settings_manager
+from ui.theme import Toast
 
 
 class ChatTab:
-    """Manages the AI Chat tab with threading, auto-visualization, and settings integration."""
+    """Manages the AI Chat tab with conversation memory, threading, and auto-visualization."""
+    
+    # Maximum number of prior Q&A turns to retain for follow-up context
+    MAX_MEMORY_TURNS = 3
     
     def __init__(self, parent):
         self.parent = parent
@@ -39,6 +45,11 @@ class ChatTab:
         self.tree = None
         self.tree_scroll_y = None
         self.tree_scroll_x = None
+        
+        # Conversation memory: rolling buffer of last N (question, sql) pairs
+        # Enables the LLM to resolve follow-up references like "filter that",
+        # "sort those by price", "what was the average for that?"
+        self.conversation_memory = []
         
         # --- Top Filter & Action Bar ---
         self.top_frame = ctk.CTkFrame(parent, fg_color="#121316", corner_radius=12)
@@ -56,6 +67,7 @@ class ChatTab:
         self.table_var = ctk.StringVar(value="Select a table")
         self.table_dropdown = ctk.CTkOptionMenu(
             row1, variable=self.table_var, values=["Select a table"],
+            command=self._on_table_changed,
             width=210, height=34, fg_color="#1E2024", button_color="#2A2D34",
             button_hover_color="#363A44", font=ctk.CTkFont(family="Segoe UI", size=12)
         )
@@ -66,7 +78,7 @@ class ChatTab:
             width=90, height=34, fg_color="#1E2024", hover_color="#2A2D34",
             text_color="#CBD5E1", font=ctk.CTkFont(family="Segoe UI", size=12)
         )
-        self.btn_refresh.pack(side="left", padx=(0, 20))
+        self.btn_refresh.pack(side="left", padx=(0, 12))
         
         # Teacher Mode Status Badge
         self.badge_teacher = ctk.CTkLabel(
@@ -78,7 +90,19 @@ class ChatTab:
             corner_radius=8,
             padx=10, pady=4
         )
-        self.badge_teacher.pack(side="left", padx=(0, 15))
+        self.badge_teacher.pack(side="left", padx=(0, 8))
+        
+        # Conversation Memory Badge
+        self.badge_memory = ctk.CTkLabel(
+            row1,
+            text="🧠 Memory: 0/3",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            text_color="#818CF8",
+            fg_color="#1A1A2E",
+            corner_radius=8,
+            padx=10, pady=4
+        )
+        self.badge_memory.pack(side="left", padx=(0, 8))
         
         # PDF Export Button (Top Right)
         self.btn_export_pdf = ctk.CTkButton(
@@ -106,15 +130,30 @@ class ChatTab:
         
         self.entry_question = ctk.CTkEntry(
             prompt_inner,
-            placeholder_text="Ask any question in English (e.g. 'Give me an overview of this file' or 'Show total sales by category')...",
+            placeholder_text="Ask anything... (follow-ups work too: 'filter that to South region', 'sort by price')",
             font=ctk.CTkFont(family="Segoe UI", size=14),
             height=46,
             fg_color="#18191E",
             border_color="#262A32",
             text_color="#F8FAFC"
         )
-        self.entry_question.pack(side="left", fill="x", expand=True, padx=(0, 12))
+        self.entry_question.pack(side="left", fill="x", expand=True, padx=(0, 8))
         self.entry_question.bind("<Return>", lambda event: self.ask_ai())
+        
+        # Clear Memory Button
+        self.btn_clear_mem = ctk.CTkButton(
+            prompt_inner,
+            text="🧹",
+            command=self._clear_memory,
+            width=46,
+            height=46,
+            fg_color="#1E2024",
+            hover_color="#374151",
+            text_color="#94A3B8",
+            font=ctk.CTkFont(size=16),
+            corner_radius=8
+        )
+        self.btn_clear_mem.pack(side="left", padx=(0, 8))
         
         self.btn_ask = ctk.CTkButton(
             prompt_inner,
@@ -127,6 +166,17 @@ class ChatTab:
             hover_color="#4F58B8"
         )
         self.btn_ask.pack(side="left")
+        
+        # --- Column Suggestion Chips ---
+        self.chips_frame = ctk.CTkFrame(prompt_card, fg_color="transparent")
+        self.chips_frame.pack(fill="x", padx=14, pady=(0, 8))
+        
+        self.lbl_chips_hint = ctk.CTkLabel(
+            self.chips_frame,
+            text="Columns:",
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            text_color="#475569"
+        )
         
         # --- AI Insights & SQL Output Card ---
         self.response_frame = ctk.CTkFrame(parent, fg_color="#121316", corner_radius=12)
@@ -160,7 +210,7 @@ class ChatTab:
             spacing1=4, spacing2=3, spacing3=4
         )
         self.txt_summary.pack(fill="x", padx=16, pady=(0, 8))
-        self.txt_summary.insert("1.0", "💡 Type a question above to receive instant conversational insights.")
+        self.txt_summary.insert("1.0", "💡 Type a question above to receive instant conversational insights.\n\n🧠 Follow-up questions work naturally — ask 'filter that to South' or 'sort by price desc'.")
         self.txt_summary.configure(state="disabled")
         
         # SQL Box
@@ -217,6 +267,93 @@ class ChatTab:
         self._refresh_tables()
         self.sync_settings_state()
         
+    def _on_table_changed(self, new_table):
+        """Reset conversation memory when the user switches context tables."""
+        self._clear_memory(silent=True)
+        self._populate_column_chips(new_table)
+    
+    def _populate_column_chips(self, table_name):
+        """Show clickable column name chips below the prompt bar for quick insertion."""
+        # Clear existing chips
+        for child in self.chips_frame.winfo_children():
+            child.destroy()
+        
+        if table_name in ("Select a table", "No tables found"):
+            return
+            
+        schema = db.get_table_schema(table_name)
+        if not schema:
+            return
+            
+        cols = [item['column'] for item in schema if item['column'] != '_id']
+        if not cols:
+            return
+        
+        self.lbl_chips_hint = ctk.CTkLabel(
+            self.chips_frame,
+            text="Columns:",
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            text_color="#475569"
+        )
+        self.lbl_chips_hint.pack(side="left", padx=(0, 6))
+        
+        for col in cols[:10]:
+            chip = ctk.CTkButton(
+                self.chips_frame,
+                text=col,
+                font=ctk.CTkFont(family="Consolas", size=10),
+                height=22,
+                width=len(col) * 8 + 16,
+                corner_radius=12,
+                fg_color="#1E2024",
+                hover_color="#2A2D34",
+                text_color="#94A3B8",
+                border_width=1,
+                border_color="#262A34",
+                command=lambda c=col: self._insert_chip(c)
+            )
+            chip.pack(side="left", padx=2)
+        
+        if len(cols) > 10:
+            ctk.CTkLabel(
+                self.chips_frame,
+                text=f"+{len(cols) - 10} more",
+                font=ctk.CTkFont(family="Segoe UI", size=10),
+                text_color="#475569"
+            ).pack(side="left", padx=4)
+    
+    def _insert_chip(self, col_name):
+        """Append clicked column name to the prompt entry."""
+        current = self.entry_question.get()
+        if current and not current.endswith(" "):
+            current += " "
+        self.entry_question.delete(0, "end")
+        self.entry_question.insert(0, current + col_name)
+        self.entry_question.focus()
+    
+    def _clear_memory(self, silent=False):
+        """Reset conversation memory buffer."""
+        self.conversation_memory = []
+        self._update_memory_badge()
+        if not silent:
+            Toast.show(self.parent, "🧹 Conversation memory cleared — fresh start!", 2000, "info")
+    
+    def _update_memory_badge(self):
+        """Update the memory counter badge in the toolbar."""
+        n = len(self.conversation_memory)
+        if n == 0:
+            self.badge_memory.configure(
+                text="🧠 Memory: 0/3",
+                text_color="#64748B",
+                fg_color="#1A1D24"
+            )
+        else:
+            self.badge_memory.configure(
+                text=f"🧠 Memory: {n}/{self.MAX_MEMORY_TURNS}",
+                text_color="#818CF8",
+                fg_color="#1A1A2E"
+            )
+        
     def sync_settings_state(self):
         """Update badge based on global settings."""
         teacher_on = settings_manager.get_setting("ai_teacher_mode", True)
@@ -239,6 +376,7 @@ class ChatTab:
             self.table_dropdown.configure(values=tables)
             if self.table_var.get() not in tables:
                 self.table_var.set(tables[0])
+                self._populate_column_chips(tables[0])
         else:
             self.table_dropdown.configure(values=["No tables found"])
             self.table_var.set("No tables found")
@@ -256,6 +394,9 @@ class ChatTab:
         self.btn_export_pdf.configure(state="disabled")
         self.lbl_status.configure(text="Translating to SQL...", text_color="#F59E0B")
         
+        # Clear prompt input immediately for fast follow-up typing
+        self.entry_question.delete(0, "end")
+        
         worker = threading.Thread(
             target=self._process_ai_query,
             args=(table, question),
@@ -265,7 +406,12 @@ class ChatTab:
         
     def _process_ai_query(self, table, question):
         schema = db.get_table_schema(table)
-        sql, err, is_fallback = ai_chat.generate_sql(table, schema, question)
+        
+        # Pass conversation memory for follow-up resolution
+        sql, err, is_fallback = ai_chat.generate_sql(
+            table, schema, question,
+            conversation_history=self.conversation_memory
+        )
         if err:
             self.parent.after(0, self._handle_error, err)
             return
@@ -282,14 +428,15 @@ class ChatTab:
             send_sample = settings_manager.get_setting("send_data_sample", False)
             text_summary = ai_chat.summarize_results(question, df, send_sample=send_sample)
             
-        self.parent.after(0, self._update_ui_with_results, sql, df, text_summary, is_fallback)
+        self.parent.after(0, self._update_ui_with_results, sql, df, text_summary, is_fallback, question)
         
     def _handle_error(self, error_message):
         self.btn_ask.configure(state="normal", text="✨ Ask Analyst")
         self.lbl_status.configure(text="Error", text_color="#EF4444")
+        Toast.show(self.parent, f"❌ {str(error_message)[:80]}", 4000, "error")
         messagebox.showerror("AI Query Error", error_message)
         
-    def _update_ui_with_results(self, sql, df, text_summary, is_fallback=False):
+    def _update_ui_with_results(self, sql, df, text_summary, is_fallback=False, question=None):
         self.current_sql = sql
         self.current_df = df
         self.current_summary = text_summary
@@ -297,10 +444,23 @@ class ChatTab:
         self.btn_ask.configure(state="normal", text="✨ Ask Analyst")
         self.btn_export_pdf.configure(state="normal")
         
+        # Append to conversation memory (rolling buffer of MAX_MEMORY_TURNS)
+        if question and sql and not is_fallback:
+            self.conversation_memory.append({
+                "question": question,
+                "sql": sql
+            })
+            # Trim to last N turns
+            if len(self.conversation_memory) > self.MAX_MEMORY_TURNS:
+                self.conversation_memory = self.conversation_memory[-self.MAX_MEMORY_TURNS:]
+            self._update_memory_badge()
+        
         if is_fallback:
             self.lbl_status.configure(text=f"⚠️ Preview Fallback: {len(df)} row(s)", text_color="#F59E0B")
+            Toast.show(self.parent, "⚠️ Couldn't parse request — showing preview instead", 3000, "warning")
         else:
             self.lbl_status.configure(text=f"Completed: {len(df)} row(s)", text_color="#10B981")
+            Toast.show(self.parent, f"✅ Query returned {len(df)} row(s)", 2500, "success")
         
         self.txt_summary.configure(state="normal")
         self.txt_summary.delete("1.0", "end")
@@ -461,6 +621,6 @@ class ChatTab:
                 self.current_df,
                 self.current_fig
             )
-            messagebox.showinfo("Export Successful", f"Executive report saved:\n{filepath}")
+            Toast.show(self.parent, f"📄 PDF saved: {filepath.split('/')[-1]}", 3000, "success")
         except Exception as e:
             messagebox.showerror("Export Failed", f"Could not create PDF:\n{e}")

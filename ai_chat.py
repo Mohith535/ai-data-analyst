@@ -166,9 +166,15 @@ def validate_sql(query):
     return True, final_sql
 
 
-def generate_sql(table_name, schema, user_question, model=None):
+def generate_sql(table_name, schema, user_question, model=None, conversation_history=None):
     """
     Translates user question into valid MySQL SELECT query via Groq.
+    
+    Args:
+        conversation_history: Optional list of dicts with keys 'question' and 'sql'.
+            Injected as prior context so the LLM can resolve follow-up references
+            like "filter that to South region" or "what was the average for that?".
+    
     Returns:
       (sql: str | None, error: str | None, is_fallback: bool)
     """
@@ -190,22 +196,32 @@ def generate_sql(table_name, schema, user_question, model=None):
         f"2. If the user asks for an overview, summary, or generic exploration, write: SELECT * FROM `{table_name}` LIMIT 25\n"
         "3. ONLY output SELECT statements. Never write DROP, DELETE, UPDATE, INSERT, or ALTER.\n"
         "4. Wrap all table and column names in backticks (`).\n"
-        "5. Do NOT include a semicolon at the end."
+        "5. Do NOT include a semicolon at the end.\n"
+        "6. The user may ask follow-up questions referencing their previous queries. "
+        "Use the conversation history below to understand what 'that', 'those', 'it', "
+        "'the same', 'filter that', 'sort it', etc. refer to."
     )
+    
+    # Build multi-turn message sequence for conversational context
+    messages = [{"role": "system", "content": system_prompt}]
+    
+    # Inject last N conversation turns so the LLM has prior context
+    if conversation_history:
+        for turn in conversation_history:
+            messages.append({"role": "user", "content": f"User asked: \"{turn['question']}\""})
+            messages.append({"role": "assistant", "content": turn['sql']})
     
     user_prompt = (
         f"Database Schema:\n{schema_text}\n\n"
         f"User Prompt: \"{user_question}\"\n\n"
         f"Generate the exact MySQL SELECT statement:"
     )
+    messages.append({"role": "user", "content": user_prompt})
     
     try:
         response = client.chat.completions.create(
             model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
+            messages=messages,
             temperature=0.1,
             max_tokens=250
         )

@@ -339,3 +339,21 @@ Below is the permanent master roadmap tracking code review improvements:
   - Added interactive retry loop for MySQL credential entry to handle typos cleanly.
 - **Test Suite Expansion:**
   - Created `tests/test_ml_and_db.py` (7 new tests). Full suite expanded to **28/28 passing unit tests**.
+
+#### Phase 5: Conversation Memory & Linear UI Polish (2026-11-14)
+- **Multi-Turn Conversation Memory (`ai_chat.py` & `ui/chat_tab.py`):**
+  - Updated `generate_sql()` to accept `conversation_history` (a rolling buffer of prior user questions and generated SQL queries).
+  - Prior conversation turns are formatted as alternating user/assistant messages in the Groq chat completions payload, giving the LLM context to resolve pronouns and relative references (e.g. *"filter that to North region"*, *"sort those by price descending"*, *"what was the average for that?"*).
+  - Maintained in `ChatTab` as a rolling buffer of the last 3 Q&A turns (`MAX_MEMORY_TURNS = 3`).
+  - Added live `🧠 Memory: N/3` badge in the chat toolbar with a one-click reset button (`🧹`) and automatic clearing on context table change.
+- **Unified Linear / Raycast Design System (`ui/theme.py`):**
+  - Created centralized design tokens (`BG_CANVAS`, `BG_CARD`, `ACCENT_PRIMARY`, `BORDER_DEFAULT`, etc.) codifying the dark theme palette and typography hierarchy.
+- **Non-Blocking Toast Notification Engine (`ui/theme.py`):**
+  - Implemented floating `Toast.show(parent, message, duration_ms, style)` with auto-dismissal.
+  - Replaced jarring synchronous modal popups for routine query success, PDF export notifications, and input errors with modern, sleek toasts.
+- **Dynamic Column Suggestion Chips (`ui/chat_tab.py`):**
+  - Automatically queries the active table schema and renders clickable pill chips for table columns beneath the search input.
+  - Clicking a chip appends the column identifier directly to the prompt bar, reducing typing effort and preventing spelling mistakes.
+- **Test Suite Expansion:**
+  - Added `tests/test_conversation_memory.py` (4 new tests) covering history injection, history-less execution, and theme token existence.
+  - Test suite expanded to **32/32 passing unit tests**.
