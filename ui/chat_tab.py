@@ -264,7 +264,7 @@ class ChatTab:
         
     def _process_ai_query(self, table, question):
         schema = db.get_table_schema(table)
-        sql, err = ai_chat.generate_sql(table, schema, question)
+        sql, err, is_fallback = ai_chat.generate_sql(table, schema, question)
         if err:
             self.parent.after(0, self._handle_error, err)
             return
@@ -280,25 +280,35 @@ class ChatTab:
             self.parent.after(0, lambda: self.lbl_status.configure(text="Synthesizing Insight...", text_color="#818CF8"))
             text_summary = ai_chat.summarize_results(question, df)
             
-        self.parent.after(0, self._update_ui_with_results, sql, df, text_summary)
+        self.parent.after(0, self._update_ui_with_results, sql, df, text_summary, is_fallback)
         
     def _handle_error(self, error_message):
         self.btn_ask.configure(state="normal", text="✨ Ask Analyst")
         self.lbl_status.configure(text="Error", text_color="#EF4444")
         messagebox.showerror("AI Query Error", error_message)
         
-    def _update_ui_with_results(self, sql, df, text_summary):
+    def _update_ui_with_results(self, sql, df, text_summary, is_fallback=False):
         self.current_sql = sql
         self.current_df = df
         self.current_summary = text_summary
         
         self.btn_ask.configure(state="normal", text="✨ Ask Analyst")
         self.btn_export_pdf.configure(state="normal")
-        self.lbl_status.configure(text=f"Completed: {len(df)} row(s)", text_color="#10B981")
+        
+        if is_fallback:
+            self.lbl_status.configure(text=f"⚠️ Preview Fallback: {len(df)} row(s)", text_color="#F59E0B")
+        else:
+            self.lbl_status.configure(text=f"Completed: {len(df)} row(s)", text_color="#10B981")
         
         self.txt_summary.configure(state="normal")
         self.txt_summary.delete("1.0", "end")
-        if text_summary:
+        if is_fallback:
+            prefix = "⚠️ Couldn't understand the request, showing a preview instead.\n\n"
+            if text_summary:
+                self.txt_summary.insert("1.0", f"{prefix}💡 {text_summary}")
+            else:
+                self.txt_summary.insert("1.0", f"{prefix}Displaying sample rows from `{self.table_var.get()}`.")
+        elif text_summary:
             self.txt_summary.insert("1.0", f"💡 {text_summary}")
         else:
             self.txt_summary.insert("1.0", "Query executed successfully. (AI Teacher mode is disabled in Settings).")

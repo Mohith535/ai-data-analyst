@@ -11,10 +11,15 @@ Fix:
 
 import os
 import re
+import sqlglot
+from sqlglot import exp
 from groq import Groq
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Blacklisted functions that can be used for DoS or arbitrary file reading
+DANGEROUS_FUNCTIONS = {"sleep", "benchmark", "load_file", "sys_eval", "sys_exec"}
 
 
 def get_groq_client():
@@ -22,7 +27,7 @@ def get_groq_client():
     if not api_key or api_key == "your_groq_api_key_here":
         raise ValueError(
             "GROQ_API_KEY is not set or still default in .env file.\n"
-            "Get your free key from https://console.groq.com and paste it in E:\\ai_data_analyst\\.env"
+            "Get your free key from https://console.groq.com and paste it in your .env file."
         )
     return Groq(api_key=api_key)
 
@@ -54,7 +59,19 @@ def build_schema_prompt(table_name, schema):
 
 
 def validate_sql(query):
-    if not query:
+    """
+    Validates a SQL query using sqlglot AST parsing (MySQL dialect).
+    Enforces:
+      1. Single statement only
+      2. Root statement must be a read-only SELECT (or CTE / WITH ... SELECT)
+      3. Prohibits DDL/DML (DROP, INSERT, UPDATE, DELETE, ALTER, etc.)
+      4. Blocks dangerous functions (SLEEP, BENCHMARK, LOAD_FILE, etc.)
+      5. Blocks file system export clauses (INTO OUTFILE / DUMPFILE)
+      6. Enforces/caps LIMIT <= 1000
+    Returns:
+      (is_valid: bool, cleaned_sql_or_error: str)
+    """
+    if not query or not query.strip():
         return False, "Empty query received."
         
     clean = query.strip()
@@ -71,27 +88,77 @@ def validate_sql(query):
         
     # Remove trailing semicolon
     clean = clean.rstrip(";").strip()
+    
+    # Fast pre-check for MySQL-specific file exfiltration clauses
+    if re.search(r"\bINTO\s+(OUTFILE|DUMPFILE)\b", clean, re.IGNORECASE):
+        return False, "Forbidden file export clause detected (INTO OUTFILE/DUMPFILE)."
+    
+    # 1. Parse AST with sqlglot using MySQL dialect
+    try:
+        statements = sqlglot.parse(clean, read="mysql")
+    except Exception as e:
+        return False, f"SQL Syntax Error: {e}"
         
-    if ";" in clean:
+    if not statements:
+        return False, "Could not parse SQL statement."
+    if len(statements) > 1:
         return False, "Query contains multiple statements. Only single queries are allowed."
         
-    upper_query = clean.upper()
-    if not (upper_query.startswith("SELECT") or upper_query.startswith("WITH")):
+    ast = statements[0]
+    if ast is None:
+        return False, "Invalid SQL statement structure."
+        
+    # 2. Must be a Select or Union expression (CTE 'WITH ... SELECT' is represented as Select in sqlglot)
+    if not isinstance(ast, (exp.Select, exp.Union)):
         return False, "Only read-only SELECT queries are permitted."
         
-    forbidden = ["DROP", "DELETE", "INSERT", "UPDATE", "ALTER", "TRUNCATE", "REPLACE", "CREATE", "GRANT", "REVOKE"]
-    for word in forbidden:
-        if re.search(rf"\b{word}\b", upper_query):
-            return False, f"Forbidden statement keyword detected: {word}"
+    # 3. Check for any forbidden DDL / DML nodes inside the AST
+    forbidden_types = (
+        exp.Insert, exp.Update, exp.Delete, exp.Drop, exp.Create,
+        exp.Alter, exp.Command, exp.Transaction, exp.Commit, exp.Rollback
+    )
+    for node in ast.walk():
+        if isinstance(node, forbidden_types):
+            return False, f"Forbidden statement type detected: {node.key.upper()}"
             
-    return True, clean
+    # 4. Check for file export (INTO OUTFILE / INTO DUMPFILE)
+    if ast.find(exp.Into):
+        return False, "Forbidden file export clause detected (INTO OUTFILE/DUMPFILE)."
+        
+    # 5. Check for dangerous functions (SLEEP, BENCHMARK, LOAD_FILE, etc.)
+    for func in ast.find_all(exp.Anonymous, exp.Func):
+        func_name = (func.name or "").lower()
+        if not func_name and hasattr(func, "this"):
+            func_name = str(func.this).lower()
+        if func_name in DANGEROUS_FUNCTIONS:
+            return False, f"Forbidden dangerous function detected: {func_name.upper()}()"
+            
+    # 6. Enforce LIMIT <= 1000 (cap existing limit if > 1000, or append LIMIT 1000)
+    limit_node = ast.find(exp.Limit)
+    if limit_node and limit_node.expression:
+        try:
+            curr_limit = int(str(limit_node.expression))
+            if curr_limit > 1000:
+                limit_node.set("expression", exp.Literal.number(1000))
+        except (ValueError, TypeError):
+            limit_node.set("expression", exp.Literal.number(1000))
+    else:
+        ast = ast.limit(1000)
+        
+    final_sql = ast.sql(dialect="mysql")
+    return True, final_sql
 
 
 def generate_sql(table_name, schema, user_question, model=None):
+    """
+    Translates user question into valid MySQL SELECT query via Groq.
+    Returns:
+      (sql: str | None, error: str | None, is_fallback: bool)
+    """
     try:
         client = get_groq_client()
     except Exception as e:
-        return None, str(e)
+        return None, str(e), False
         
     if not model:
         model = get_available_model(client)
@@ -130,15 +197,15 @@ def generate_sql(table_name, schema, user_question, model=None):
         is_valid, final_sql_or_err = validate_sql(raw_sql)
         
         # Self-healing fallback: If LLM apologized or hallucinated invalid non-SELECT output,
-        # fallback seamlessly to a clean overview query rather than crashing the user's UI
+        # fallback seamlessly to a clean overview query with is_fallback=True
         if not is_valid:
             fallback_sql = f"SELECT * FROM `{table_name}` LIMIT 25"
-            return fallback_sql, None
+            return fallback_sql, None, True
             
-        return final_sql_or_err, None
+        return final_sql_or_err, None, False
         
     except Exception as e:
-        return None, f"Groq API Error: {e}"
+        return None, f"Groq API Error: {e}", False
 
 
 def summarize_results(user_question, df, model=None):

@@ -181,12 +181,29 @@ def run_query(sql):
     """
     Execute a read query and return results as a Pandas DataFrame.
     Uses native cursor fetch to avoid Pandas/SQLAlchemy DBAPI UserWarnings.
+    Enforces session-level read-only safety and execution timeout.
     """
     conn = get_connection()
     if conn is None:
         return None, "Could not connect to MySQL."
     try:
         cursor = conn.cursor()
+        
+        # Defense-in-depth: Set read-only session transaction
+        try:
+            cursor.execute("SET SESSION TRANSACTION READ ONLY")
+        except Exception:
+            pass
+            
+        # Defense-in-depth: Set 5-second query timeout (MySQL 8.0+ / MariaDB)
+        try:
+            cursor.execute("SET SESSION max_execution_time = 5000")
+        except Exception:
+            try:
+                cursor.execute("SET SESSION max_statement_time = 5")
+            except Exception:
+                pass
+                
         cursor.execute(sql)
         if cursor.description:
             columns = [desc[0] for desc in cursor.description]

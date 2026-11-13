@@ -139,6 +139,13 @@ def configure_groq_api_key():
 def configure_mysql():
     print(f"{BOLD}[4/5] Configuring MySQL Database Connection...{RESET}")
     print("Ensure MySQL Server 8.0+ is installed and running on your machine.")
+    print(f"""{CYAN}┌──────────────────────────────────────────────────────────────────┐
+│  🔒 PRODUCTION SECURITY TIP: DEDICATED READ-ONLY USER             │
+│  For maximum defense-in-depth, create a read-only database user: │
+│    CREATE USER 'analyst_ro'@'localhost' IDENTIFIED BY 'pass';    │
+│    GRANT SELECT ON analyst_db.* TO 'analyst_ro'@'localhost';    │
+│    FLUSH PRIVILEGES;                                             │
+└──────────────────────────────────────────────────────────────────┘{RESET}""")
 
     host = input("MySQL Host [default: localhost]: ").strip() or "localhost"
     user = input("MySQL User [default: root]: ").strip() or "root"
