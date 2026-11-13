@@ -20,9 +20,21 @@ import subprocess
 import getpass
 import webbrowser
 
-# Enable ANSI escape sequences on Windows cmd
-if os.name == 'nt':
-    os.system('')
+# Enable ANSI escape sequences on Windows cmd / PowerShell
+def _init_windows_ansi():
+    if os.name == 'nt':
+        try:
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            h_out = kernel32.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
+            mode = ctypes.c_ulong()
+            if kernel32.GetConsoleMode(h_out, ctypes.byref(mode)):
+                # 0x0004 = ENABLE_VIRTUAL_TERMINAL_PROCESSING
+                kernel32.SetConsoleMode(h_out, mode.value | 0x0004)
+        except Exception:
+            os.system('')
+
+_init_windows_ansi()
 
 # ANSI terminal colors for a modern CLI experience
 GREEN = "\033[92m"
@@ -147,34 +159,34 @@ def configure_mysql():
 │    FLUSH PRIVILEGES;                                             │
 └──────────────────────────────────────────────────────────────────┘{RESET}""")
 
-    host = input("MySQL Host [default: localhost]: ").strip() or "localhost"
-    user = input("MySQL User [default: root]: ").strip() or "root"
-    password = getpass.getpass("MySQL Password (hidden, press Enter if no password): ")
-    db_name = input("Database Name [default: analyst_db]: ").strip() or "analyst_db"
+    while True:
+        host = input("MySQL Host [default: localhost]: ").strip() or "localhost"
+        user = input("MySQL User [default: root]: ").strip() or "root"
+        password = getpass.getpass("MySQL Password (hidden, press Enter if no password): ")
+        db_name = input("Database Name [default: analyst_db]: ").strip() or "analyst_db"
 
-    # Test MySQL connection
-    print(f"{BLUE}Connecting to MySQL at {host} as '{user}'...{RESET}")
-    try:
-        import mysql.connector
-        conn = mysql.connector.connect(
-            host=host,
-            user=user,
-            password=password
-        )
-        cursor = conn.cursor()
-        cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{db_name}`")
-        conn.commit()
-        cursor.close()
-        conn.close()
-        print(f"{GREEN}✓ Connected to MySQL successfully! Database `{db_name}` is ready.{RESET}\n")
-    except Exception as e:
-        print(f"{YELLOW}⚠️ Could not connect to MySQL: {e}{RESET}")
-        print("Please check that MySQL Server is running. The configuration will be saved anyway.")
-        cont = input("Continue anyway? [Y/n]: ").strip().lower()
-        if cont in ('n', 'no'):
-            sys.exit(1)
-
-    return host, user, password, db_name
+        # Test MySQL connection
+        print(f"{BLUE}Connecting to MySQL at {host} as '{user}'...{RESET}")
+        try:
+            import mysql.connector
+            conn = mysql.connector.connect(
+                host=host,
+                user=user,
+                password=password
+            )
+            cursor = conn.cursor()
+            cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{db_name}`")
+            conn.commit()
+            cursor.close()
+            conn.close()
+            print(f"{GREEN}✓ Connected to MySQL successfully! Database `{db_name}` is ready.{RESET}\n")
+            return host, user, password, db_name
+        except Exception as e:
+            print(f"{RED}❌ Could not connect to MySQL: {e}{RESET}")
+            retry = input("Try entering MySQL credentials again? [Y/n]: ").strip().lower()
+            if retry in ('n', 'no'):
+                print(f"{YELLOW}Saving configuration anyway without live verification.{RESET}\n")
+                return host, user, password, db_name
 
 
 def write_env_file(groq_key, host, user, password, db_name):

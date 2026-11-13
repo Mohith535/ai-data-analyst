@@ -10,7 +10,7 @@ Handles all MySQL interactions:
 """
 
 import mysql.connector
-from mysql.connector import Error
+from mysql.connector import Error, pooling
 import pandas as pd
 import re
 import os
@@ -18,8 +18,44 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Simple MySQL connection pool for fast connection reuse
+_CONNECTION_POOL = None
+
+
+def get_pool():
+    """Returns or initializes the thread-safe MySQL connection pool."""
+    global _CONNECTION_POOL
+    if _CONNECTION_POOL is None:
+        try:
+            _CONNECTION_POOL = pooling.MySQLConnectionPool(
+                pool_name="analyst_pool",
+                pool_size=5,
+                pool_reset_session=True,
+                host=os.getenv("DB_HOST", "localhost"),
+                user=os.getenv("DB_USER", "root"),
+                password=os.getenv("DB_PASSWORD", ""),
+                database=os.getenv("DB_NAME", "analyst_db")
+            )
+        except Exception as e:
+            print(f"[DB POOL INFO] Falling back to direct connections: {e}")
+            _CONNECTION_POOL = None
+    return _CONNECTION_POOL
+
 
 def get_connection(use_database=True):
+    """
+    Returns an active MySQL connection.
+    Draws from the connection pool when querying the active database;
+    falls back to direct connection if pooling is uninitialized.
+    """
+    if use_database:
+        pool = get_pool()
+        if pool:
+            try:
+                return pool.get_connection()
+            except Exception:
+                pass
+
     try:
         config = {
             "host": os.getenv("DB_HOST", "localhost"),
@@ -127,6 +163,24 @@ def load_dataframe_to_mysql(df, table_name):
             new_columns.append(clean_c)
         clean_df.columns = new_columns
         
+        # 1b. Date sniffing: Detect date-like columns and parse into true DATETIME
+        for col in clean_df.columns:
+            if clean_df[col].dtype == 'object':
+                col_lower = str(col).lower()
+                is_date_named = any(k in col_lower for k in ("date", "time", "created", "timestamp", "dt", "year"))
+                non_null = clean_df[col].dropna()
+                if len(non_null) > 0 and (is_date_named or len(non_null) <= 5000):
+                    try:
+                        sample = non_null.head(25)
+                        parsed_sample = pd.to_datetime(sample, errors='coerce')
+                        # If >= 75% of non-null sample parses as valid dates (and not plain integers)
+                        if parsed_sample.notna().sum() / len(sample) >= 0.75:
+                            first_val = str(sample.iloc[0]).strip()
+                            if not first_val.isdigit() or len(first_val) == 8:
+                                clean_df[col] = pd.to_datetime(clean_df[col], errors='coerce')
+                    except Exception:
+                        pass
+        
         # 2. Build CREATE TABLE SQL
         columns_sql = []
         for col_name in clean_df.columns:
@@ -154,8 +208,10 @@ def load_dataframe_to_mysql(df, table_name):
         for row in data:
             clean_row = []
             for val in row:
-                if val is None:
+                if val is None or pd.isna(val):
                     clean_row.append(None)
+                elif isinstance(val, (pd.Timestamp, pd.DatetimeIndex)):
+                    clean_row.append(val.strftime('%Y-%m-%d %H:%M:%S'))
                 elif hasattr(val, 'item'):
                     clean_row.append(val.item())
                 else:

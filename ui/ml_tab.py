@@ -21,6 +21,7 @@ class MLTab:
         self.parent = parent
         self.current_canvas = None
         self.current_fig = None
+        self.numeric_cols = []
         
         # --- Top Controls Card ---
         self.controls_frame = ctk.CTkFrame(parent, fg_color="#18191E", corner_radius=12)
@@ -59,7 +60,7 @@ class MLTab:
         self.lbl_feature = ctk.CTkLabel(row2, text="Feature (X):", font=ctk.CTkFont(size=12))
         self.lbl_feature.pack(side="left", padx=(0, 4))
         self.feature_var = ctk.StringVar(value="—")
-        self.feature_dropdown = ctk.CTkOptionMenu(row2, variable=self.feature_var, values=["—"], width=150, fg_color="#262A34")
+        self.feature_dropdown = ctk.CTkOptionMenu(row2, variable=self.feature_var, values=["—"], width=180, fg_color="#262A34")
         self.feature_dropdown.pack(side="left", padx=(0, 12))
         
         self.lbl_target = ctk.CTkLabel(row2, text="Target (Y):", font=ctk.CTkFont(size=12))
@@ -125,13 +126,31 @@ class MLTab:
         df, _ = db.run_query(f"SELECT * FROM `{table_name}` LIMIT 100")
         if df is None:
             return
-        numeric_cols = [c for c in df.select_dtypes(include=['number']).columns if c != '_id']
-        if numeric_cols:
-            self.feature_dropdown.configure(values=numeric_cols)
-            self.target_dropdown.configure(values=numeric_cols)
-            self.feature_var.set(numeric_cols[0])
-            self.target_var.set(numeric_cols[1] if len(numeric_cols) > 1 else numeric_cols[0])
-            
+        self.numeric_cols = [c for c in df.select_dtypes(include=['number']).columns if c != '_id']
+        self._update_dropdown_options()
+
+    def _update_dropdown_options(self):
+        if not self.numeric_cols:
+            self.feature_dropdown.configure(values=["—"])
+            self.target_dropdown.configure(values=["—"])
+            self.feature_var.set("—")
+            self.target_var.set("—")
+            return
+
+        model_type = self.model_var.get()
+        if model_type == "Linear Regression" and len(self.numeric_cols) > 1:
+            feature_opts = self.numeric_cols + ["[All Features Combined]"]
+        else:
+            feature_opts = list(self.numeric_cols)
+
+        self.feature_dropdown.configure(values=feature_opts)
+        self.target_dropdown.configure(values=self.numeric_cols)
+
+        if self.feature_var.get() not in feature_opts:
+            self.feature_var.set(feature_opts[0])
+        if self.target_var.get() not in self.numeric_cols:
+            self.target_var.set(self.numeric_cols[1] if len(self.numeric_cols) > 1 else self.numeric_cols[0])
+
     def _on_model_changed(self, model_name):
         if model_name == "Linear Regression":
             self.lbl_feature.configure(text="Feature (X):")
@@ -143,18 +162,38 @@ class MLTab:
             self.lbl_target.configure(text="Dimension 2:")
             self.lbl_clusters.configure(text_color="#F8FAFC")
             self.clusters_entry.configure(state="normal")
-            
+        self._update_dropdown_options()
+
     def _run_model(self):
         table = self.table_var.get()
         f = self.feature_var.get()
         t = self.target_var.get()
         model_type = self.model_var.get()
-        
+
         if table in ("Select a table", "No tables found") or f == "—" or t == "—":
             messagebox.showwarning("Notice", "Select table and numerical features.")
             return
 
-        if model_type != "Linear Regression":
+        if model_type == "Linear Regression":
+            if f == "[All Features Combined]":
+                selected_features = [c for c in self.numeric_cols if c != t]
+                if not selected_features:
+                    messagebox.showwarning("Invalid Selection", "No remaining features to predict target.")
+                    return
+            else:
+                if f == t:
+                    messagebox.showwarning("Invalid Selection", "Feature (X) and Target (Y) cannot be the same column.")
+                    return
+                selected_features = [f]
+
+            needed_cols = list(dict.fromkeys(selected_features + [t]))
+            col_list_str = ", ".join([f"`{c}`" for c in needed_cols])
+            sql = f"SELECT {col_list_str} FROM `{table}` LIMIT 10000"
+            k = 3
+        else:
+            if f == t:
+                messagebox.showwarning("Invalid Selection", "Dimension 1 and Dimension 2 must be different columns.")
+                return
             try:
                 k = int(self.clusters_var.get().strip())
                 if k < 2 or k > 20:
@@ -162,34 +201,37 @@ class MLTab:
             except ValueError as ve:
                 messagebox.showwarning("Invalid Cluster Parameter", f"Please enter a valid number of clusters (2-20):\n{ve}")
                 return
-        else:
-            k = 3
-            
-        sql = f"SELECT `{f}`, `{t}` FROM `{table}` LIMIT 10000"
-        
+            selected_features = [f]
+            sql = f"SELECT `{f}`, `{t}` FROM `{table}` LIMIT 10000"
+
         self.btn_run.configure(state="disabled", text="⏳ Fitting...")
         self.lbl_results.configure(text="⏳ Fitting model and calculating metrics in background...", text_color="#60A5FA")
-        
+
         def worker():
             df, err = db.run_query(sql)
             if err:
                 raise ValueError(err)
             if df is None or df.empty:
                 raise ValueError("No rows found in table.")
-                
+
             if model_type == "Linear Regression":
-                res = ml.run_linear_regression(df, f, t)
-                txt = f"📐 R² Score: {res['r2']:.4f}  |  MAE: {res['mae']:.2f}  |  Equation: {res['equation']}"
-                return res['figure'], txt
+                res = ml.run_linear_regression(df, selected_features, t)
+                if res.get('warning'):
+                    txt = f"📐 R² Score: {res['r2']:.4f}  |  MAE: {res['mae']:.2f}\n⚠️ {res['warning']}"
+                    color = "#F59E0B"
+                else:
+                    txt = f"📐 R² Score: {res['r2']:.4f}  |  MAE: {res['mae']:.2f}  |  Equation: {res['equation']}"
+                    color = "#10B981"
+                return res['figure'], txt, color
             else:
                 res = ml.run_kmeans(df, f, t, n_clusters=k)
-                txt = f"📊 K: {res['n_clusters']}  |  Inertia: {res['inertia']:.2f}  |  Counts: {res['cluster_sizes']}"
-                return res['figure'], txt
+                txt = f"📊 Clusters (K): {res['n_clusters']}  |  Inertia: {res['inertia']:.2f}  |  Distribution: {res['cluster_sizes']}"
+                return res['figure'], txt, "#10B981"
 
         def on_success(result):
-            fig, txt = result
+            fig, txt, color = result
             self.btn_run.configure(state="normal", text="🚀 Train & Fit")
-            self.lbl_results.configure(text=txt, text_color="#10B981")
+            self.lbl_results.configure(text=txt, text_color=color)
             self._embed_chart(fig)
 
         def on_error(exc):

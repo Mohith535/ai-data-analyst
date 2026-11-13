@@ -239,33 +239,137 @@ class UploadTab:
             values = [str(v) if pd.notna(v) else "" for v in row]
             self.tree.insert("", "end", values=values)
             
+class TableConflictModal(ctk.CTkToplevel):
+    """
+    Non-destructive modal dialog to resolve table collision in MySQL.
+    Gives the user explicit control: Overwrite vs Rename vs Cancel.
+    """
+    def __init__(self, parent, base_name, next_name, row_count, col_count):
+        super().__init__(parent)
+        self.title("Table Conflict Detected")
+        self.geometry("450x260")
+        self.resizable(False, False)
+        self.configure(fg_color="#18191E")
+        self.result = "cancel"
+
+        self.transient(parent)
+        self.grab_set()
+
+        lbl_head = ctk.CTkLabel(
+            self,
+            text=f"⚠️  Table `{base_name}` Already Exists",
+            font=ctk.CTkFont(family="Segoe UI", size=15, weight="bold"),
+            text_color="#F59E0B"
+        )
+        lbl_head.pack(padx=20, pady=(18, 6), anchor="w")
+
+        lbl_msg = ctk.CTkLabel(
+            self,
+            text=(
+                f"A table named `{base_name}` already exists in your MySQL database.\n\n"
+                f"Incoming Dataset: {row_count:,} rows, {col_count} columns.\n"
+                f"Choose how you want to handle this upload:"
+            ),
+            font=ctk.CTkFont(family="Segoe UI", size=12),
+            text_color="#CBD5E1",
+            justify="left"
+        )
+        lbl_msg.pack(padx=20, pady=(0, 14), anchor="w")
+
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=20, pady=(4, 16))
+
+        def choose(val):
+            self.result = val
+            self.destroy()
+
+        btn_replace = ctk.CTkButton(
+            btn_frame,
+            text=f"🔄 Overwrite Existing Table (`{base_name}`)",
+            command=lambda: choose("replace"),
+            fg_color="#EF4444",
+            hover_color="#DC2626",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            height=34
+        )
+        btn_replace.pack(fill="x", pady=4)
+
+        btn_rename = ctk.CTkButton(
+            btn_frame,
+            text=f"📋 Save as New Table (`{next_name}`)",
+            command=lambda: choose("rename"),
+            fg_color="#3B82F6",
+            hover_color="#2563EB",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            height=34
+        )
+        btn_rename.pack(fill="x", pady=4)
+
+        btn_cancel = ctk.CTkButton(
+            btn_frame,
+            text="Cancel",
+            command=lambda: choose("cancel"),
+            fg_color="#2D3139",
+            hover_color="#374151",
+            text_color="#94A3B8",
+            font=ctk.CTkFont(size=11),
+            height=28
+        )
+        btn_cancel.pack(fill="x", pady=(4, 0))
+
+
     def save_to_mysql(self):
         if self.current_df is None:
             messagebox.showwarning("No Data", "Please load a CSV file first.")
             return
-            
-        table_name = db.sanitize_table_name(self.current_filename)
-        confirm = messagebox.askyesno(
-            "Confirm Ingestion",
-            f"Save dataset into MySQL table `{table_name}`?\n\n"
-            f"Rows: {len(self.current_df):,}\nColumns: {len(self.current_df.columns)}\n\n"
-            "Existing table with same name will be replaced."
-        )
-        if not confirm:
-            return
-            
+
+        base_table = db.sanitize_table_name(self.current_filename)
+        existing_tables = db.list_tables()
+        target_table = base_table
+
+        if base_table in existing_tables:
+            # Find next free version name
+            v = 2
+            while f"{base_table}_v{v}" in existing_tables:
+                v += 1
+            next_name = f"{base_table}_v{v}"
+
+            modal = TableConflictModal(
+                self.parent,
+                base_name=base_table,
+                next_name=next_name,
+                row_count=len(self.current_df),
+                col_count=len(self.current_df.columns)
+            )
+            self.parent.wait_window(modal)
+
+            if modal.result == "replace":
+                target_table = base_table
+            elif modal.result == "rename":
+                target_table = next_name
+            else:
+                return  # User cancelled
+        else:
+            confirm = messagebox.askyesno(
+                "Confirm Ingestion",
+                f"Save dataset into new MySQL table `{base_table}`?\n\n"
+                f"Rows: {len(self.current_df):,}\nColumns: {len(self.current_df.columns)}"
+            )
+            if not confirm:
+                return
+
         self.btn_save.configure(state="disabled", text="⏳ Ingesting...")
-        self.lbl_status.configure(text=f"⏳ Ingesting {len(self.current_df):,} rows into `{table_name}`...", text_color="#60A5FA")
-        
+        self.lbl_status.configure(text=f"⏳ Ingesting {len(self.current_df):,} rows into `{target_table}`...", text_color="#60A5FA")
+
         def worker():
-            return db.load_dataframe_to_mysql(self.current_df, table_name)
+            return db.load_dataframe_to_mysql(self.current_df, target_table)
 
         def on_success(result):
             success, message = result
             self.btn_save.configure(state="normal", text="💾  Save to MySQL")
             if success:
                 messagebox.showinfo("Success", message)
-                self.lbl_status.configure(text=f"Ingested into table `{table_name}`", text_color="#34D399")
+                self.lbl_status.configure(text=f"Ingested into table `{target_table}`", text_color="#34D399")
             else:
                 messagebox.showerror("Database Error", message)
                 self.lbl_status.configure(text="Ingestion failed", text_color="#EF4444")

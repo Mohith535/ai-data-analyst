@@ -314,3 +314,28 @@ Below is the permanent master roadmap tracking code review improvements:
   - `ui/interactive_tab.py`: Plotly HTML generation runs in background threads with button loading state (`⏳ Launching Canvas...`).
 - **Eliminated Matplotlib Memory Leaks:** Explicitly invoked `plt.close(self.current_fig)` before rendering new plots in `charts_tab.py`, `ml_tab.py`, and `chat_tab.py`. Registered `plt.close('all')` on window exit (`WM_DELETE_WINDOW`).
 - **Dynamic Groq Status Badge:** Replaced hardcoded string with dynamic live badge in sidebar (`Connected` in green, `No API Key` in amber, `Offline` in red) automatically evaluated at startup and updated live after the Settings connection test.
+
+#### Phase 4: Database Enhancements, Multi-Feature ML & Table Collision Safety (2026-11-13)
+- **MySQL Connection Pooling (`db.py`):**
+  - Integrated thread-safe `mysql.connector.pooling.MySQLConnectionPool(pool_size=5)` for instant connection reuse across async queries.
+  - Automatic fallback to direct connections if pooling is uninitialized.
+- **Intelligent Date Sniffing & True DATETIME Ingestion (`db.py`):**
+  - Scans object columns in uploaded CSVs for temporal naming conventions (`date`, `time`, `created`, `timestamp`, `dt`, `year`) and evaluates a sample using `pd.to_datetime`.
+  - When $\ge 75\%$ of non-null samples parse as valid dates, coerces to `datetime64[ns]` and provisions columns as native MySQL `DATETIME` instead of generic `TEXT`.
+- **Non-Destructive Table Collision Modal (`ui/upload_tab.py`):**
+  - When ingesting a CSV with a name matching an existing MySQL table, pops up `TableConflictModal` with 3 explicit choices:
+    1. `🔄 Overwrite Existing Table` (drops and replaces).
+    2. `📋 Save as New Table` (automatically versions as `table_v2`, `table_v3`).
+    3. `❌ Cancel` (aborts ingestion safely).
+- **Multi-Feature Linear Regression & Actual vs. Predicted Visuals (`ml.py` & `ui/ml_tab.py`):**
+  - `run_linear_regression()` now supports both single feature strings and lists of multiple feature columns.
+  - For multi-feature models, renders an **Actual vs. Predicted** scatter plot with an ideal 45-degree diagonal reference line ($y = \hat{y}$).
+  - In `ui/ml_tab.py`, added `[All Features Combined]` option to automatically train multi-variable models on all available numeric dimensions.
+- **Negative $R^2$ Diagnostic & Feature Recommendation Engine (`ml.py`):**
+  - Built `suggest_best_features(df, target_col)`: ranks features by Pearson correlation $|r|$ against the target.
+  - When $R^2 < 0$ on unseen test splits (indicating residual variance exceeds total variance, fitting worse than the horizontal mean), surfaces an amber diagnostic warning banner and recommends the top correlated feature.
+- **Windows Terminal ANSI Mode & Setup Resiliency (`setup.py`):**
+  - Enabled Windows Virtual Terminal mode via `ctypes.windll.kernel32.SetConsoleMode` to eliminate raw `←[1m` escape artifacts on Windows command prompt and PowerShell.
+  - Added interactive retry loop for MySQL credential entry to handle typos cleanly.
+- **Test Suite Expansion:**
+  - Created `tests/test_ml_and_db.py` (7 new tests). Full suite expanded to **28/28 passing unit tests**.
