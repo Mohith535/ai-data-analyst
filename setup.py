@@ -20,6 +20,10 @@ import subprocess
 import getpass
 import webbrowser
 
+# Enable ANSI escape sequences on Windows cmd
+if os.name == 'nt':
+    os.system('')
+
 # ANSI terminal colors for a modern CLI experience
 GREEN = "\033[92m"
 BLUE = "\033[94m"
