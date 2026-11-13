@@ -276,3 +276,5 @@ flowchart TD
 
 ### Q15: How does the application handle CSV delimiter inconsistencies?
 > **Answer:** "CSV files in the real world are not always comma-delimited; European files frequently use semicolons (`;`) and TSV exports use tabs (`\t`). In `upload_tab.py`, our ingestion pipeline utilizes a cascading fallback: it first attempts standard UTF-8 comma parsing; if a decode error occurs, it falls back to `latin-1`; if format errors occur, it activates Pandas' C/Python sniffing engine (`sep=None, engine='python'`) which analyzes the first few lines to deduce the true delimiter automatically."
+
+| `db.py` | `pd.read_sql(sql, conn)` emitted Pandas 2.0+ DBAPI `UserWarning` suggesting SQLAlchemy. | Harmless but cluttered console during startup and query runs. | Replaced `pd.read_sql` with native cursor execution (`cursor.fetchall() + pd.DataFrame()`), delivering clean console logs with zero warnings. |

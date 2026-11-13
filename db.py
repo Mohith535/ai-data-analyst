@@ -178,11 +178,23 @@ def load_dataframe_to_mysql(df, table_name):
 
 
 def run_query(sql):
+    """
+    Execute a read query and return results as a Pandas DataFrame.
+    Uses native cursor fetch to avoid Pandas/SQLAlchemy DBAPI UserWarnings.
+    """
     conn = get_connection()
     if conn is None:
         return None, "Could not connect to MySQL."
     try:
-        df = pd.read_sql(sql, conn)
+        cursor = conn.cursor()
+        cursor.execute(sql)
+        if cursor.description:
+            columns = [desc[0] for desc in cursor.description]
+            data = cursor.fetchall()
+            df = pd.DataFrame(data, columns=columns)
+        else:
+            df = pd.DataFrame()
+        cursor.close()
         return df, None
     except Exception as e:
         return None, f"Query error: {e}"
